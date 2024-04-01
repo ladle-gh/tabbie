@@ -4,14 +4,15 @@ import java.math.BigInteger
 import java.math.RoundingMode.*
 import java.util.*
 
-private val NEGATIVE_ONE = -ONE
-private val ROUGHLY_TWO_PI = DECIMAL_TWO * BigDecimal("3.141592653589793")
+private fun BigDecimal.remainder2Pi(): BigDecimal {
+    return takeIf { this < Constants.ROUGHLY_TWO_PI }?.remainder(Constants.ROUGHLY_TWO_PI) ?: this
+}
 
-private fun BigDecimal.remainder2Pi(): BigDecimal = if (this < ROUGHLY_TWO_PI) this else this.remainder(ROUGHLY_TWO_PI)
-private fun neg1Pow(x: Int): BigDecimal = if (x % 2 == 0) ONE else NEGATIVE_ONE
+private fun neg1Pow(x: Int): BigDecimal = if ( x % 2 == 0) ONE else Constants.NEGATIVE_ONE
 
-private fun twoToThe(x: Int): BigDecimal =
-    BigDecimal(BigInteger(BitSet(x + 1).apply { set(x, true) }.toByteArray().reversedArray()))
+private fun twoToThe(x: Int): BigDecimal {
+    return BigDecimal(BigInteger(BitSet(x + 1).apply { set(x, true) }.toByteArray().reversedArray()))
+}
 // TODO benchmark against other methods
 
 /**
@@ -55,7 +56,7 @@ internal fun sinh(x: BigDecimal) = series(
 internal fun cosh(x: BigDecimal) = series(
     x = x.remainder2Pi(),
     getNumer = { ONE },
-    getDenom = { DECIMAL_TWO*factorial(it) },
+    getDenom = { Constants.TWO*factorial(it) },
     pow0 = 0,
     powStep = 2
 )
@@ -99,7 +100,7 @@ internal fun arcsin(x: BigDecimal) = series(
 )
 
 // Special cases and shortcuts covered by elem func symbols in simlpify()
-internal fun arccos(x: BigDecimal) = HALF_PI - arcsin(x)
+internal fun arccos(x: BigDecimal) = Expression.HALF_PI - arcsin(x)
 
 internal fun arctan(x: BigDecimal) = series(
     x = x,

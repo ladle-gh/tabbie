@@ -1,22 +1,20 @@
 import java.math.BigDecimal
 
-private val MAX_WHOLE_POWER = BigDecimal(999999999)
-
 class Exponent(
     val base: Expression,
     val power: Expression,
     isSimplified: Boolean = false
 ) : Expression(isSimplified) {
-    override fun splitIntPower(): Split<Int, Expression> {
+    override fun isolateIntPower(): Pair<Int, Expression> {
         val intPower = power.coefficient().toBigInteger()
-        return if (intPower > INTEGER_MAX) {  // Treat power as part of base
-            Split(1, this)
+        return if (intPower > Constants.INT_MAX) {  // Treat power as part of base
+            Pair(1, this)
         } else {
-            Split(intPower.toInt(), base)
+            Pair(intPower.toInt(), base)
         }
     }
 
-    override fun isReciprocal() = base is Value && power == Value.NEGATIVE_ONE
+    override fun isReciprocal() = base is Value && power == NEGATIVE_ONE
 
     override fun simplify(): Expression = simplify(3)
 
@@ -25,9 +23,9 @@ class Exponent(
         var power = power.checkSimplified()
 
         when {
-            power == Value.NEGATIVE_ONE -> return Exponent(base, power, true)
-            power == Value.ZERO || base == Value.ONE -> return Value.ONE
-            power == Value.ONE -> return base
+            power == NEGATIVE_ONE -> return Exponent(base, power, true)
+            power == ZERO || base == ONE -> return ONE
+            power == ONE -> return base
         }
         if (base is Exponent) {  // Bring outer exponent down (Power Rule); (x^a)^b = x^(a*b)
             power = (base.power * power).simplify()
@@ -41,7 +39,7 @@ class Exponent(
         }
         if (base is Sum && power is Value && power.value <= maxPower.toBigDecimal()) {  // Work out manually
             val sumTerms = base.members.toMutableList()
-            val (intPower, fracPower) = power.value.splitDecimal()
+            val (intPower, fracPower) = power.value.isolateIntegralPart()
             val root = if (fracPower notEquals BigDecimal.ZERO) {
                 pow(base, Value(fracPower), true)
             } else null
@@ -66,19 +64,19 @@ class Exponent(
         TODO("Not yet implemented")
     }
 
-    override fun substitute(varl: Char, sub: BigDecimal) =
-        pow(base.substitute(varl, sub), power.substitute(varl, sub)).checkSimplified()
+    override fun substitute(vars: VariableTable) =
+        pow(base.substitute(vars), power.substitute(vars)).checkSimplified()
 
     override fun equals(other: Any?) = strictEquals(other) { base == it.base && power == it.power }
     override fun hashCode() = hash(base, power)
     override fun toString() = "($base^$power)"  // Debug
 
     fun simplifyAsFraction(base: Value, power: Value): Expression {
-        if (base == Value.ZERO && power.value > BigDecimal.ZERO) {
-            return Value.ZERO
+        if (base == ZERO && power.value > BigDecimal.ZERO) {
+            return ZERO
         }
-        val (intPower, _) = power.value.splitDecimal()
-        if (intPower > MAX_WHOLE_POWER) {   // Too big to simplify
+        val (intPower, _) = power.value.isolateIntegralPart()
+        if (intPower > Constants.WHOLE_POWER_MAX) { // Too big to simplify
             return Exponent(base, power, true)
         }
         return Value(base.value.pow(intPower.toInt())).times(exp(power*log(base.value)), true)

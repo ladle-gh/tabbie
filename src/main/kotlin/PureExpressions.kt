@@ -1,10 +1,5 @@
 import java.math.BigDecimal
 
-val E = Variable('e')
-val PI = Variable("{pi}")
-val TWO_PI = Value.TWO.times(PI, true)
-val HALF_PI = PI.div(Value.TWO.reciprocal(), true)
-
     // TODO benchmark alternate
 
 /**
@@ -19,18 +14,11 @@ abstract class PureExpression : Expression(true) {
  * A rational number.
  */
 class Value(val value: BigDecimal) : PureExpression() {
-    override fun substitute(varl: Char, sub: BigDecimal) = this
+    override fun substitute(vars: VariableTable) = this
     override fun coefficient() = value
     override fun equals(other: Any?) = strictEquals(other) { value equals it.value }
     override fun hashCode() = value.hashCode()
     override fun toString() = value.toString()  // Debug
-
-    companion object {
-        val ONE = Value(BigDecimal.ONE)
-        val TWO = Value(BigDecimal(2))
-        val ZERO = Value(BigDecimal.ZERO)
-        val NEGATIVE_ONE = Value(BigDecimal(-1))
-    }
 }
 
 /**
@@ -52,7 +40,11 @@ class Variable : PureExpression {
         }
     }
 
-    override fun substitute(varl: Char, sub: BigDecimal): Expression = if (varl != id) this else Value(sub)
+    override fun substitute(vars: VariableTable): Expression {
+        vars.forEach { (varl, sub) -> if (id == varl) return sub }
+        return this
+    }
+
     override fun equals(other: Any?) = strictEquals(other) { id == it.id }
     override fun hashCode() = id.hashCode()
     override fun toString() = id.toString() // Debug

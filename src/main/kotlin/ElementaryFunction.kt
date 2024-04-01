@@ -1,7 +1,6 @@
 import java.math.BigDecimal
 
 class ElementaryFunction(var value: Expression, isSimplified: Boolean = false) : Expression(isSimplified) {
-
     override fun simplify(): Expression {
         TODO("Not yet implemented")
     }
@@ -10,7 +9,7 @@ class ElementaryFunction(var value: Expression, isSimplified: Boolean = false) :
         TODO("Not yet implemented")
     }
 
-    override fun substitute(varl: Char, sub: BigDecimal): Expression {
+    override fun substitute(vars: VariableTable): Expression {
         TODO("Not yet implemented")
     }
 
