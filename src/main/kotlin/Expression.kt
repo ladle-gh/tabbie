@@ -11,6 +11,22 @@ fun pow(x: Expression, power: Expression) = Exponent(x, power)
 fun pow(x: Expression, power: Expression, isSimplified: Boolean) = Exponent(x, power, isSimplified)
 
 /**
+ * Signifies that an expression can be negated (using the abstract function below) in a matter more efficient than
+ * just wrapping it as a [Product] with a coefficient of -1.
+ * Classes extending this interface must override both [Expression.isNegative] as well.
+ * @see Expression
+ */
+interface CanBeNegative {
+    fun isNegative(): Boolean
+    fun removeNegative(): Expression
+}
+
+interface SimplifiedExpression {
+
+}
+
+
+/**
  * Any mathematical expression. The different types are as follows:
  *
  * - [Pure][PureExpression]: Expressions whose simplified value is always themselves
@@ -29,17 +45,11 @@ fun pow(x: Expression, power: Expression, isSimplified: Boolean) = Exponent(x, p
  *
  * Expressions are used when simplification to a [BigDecimal] value is not possible or is not exact
  * (note how fractions are expressed as [Products][Product]).
+ * @see CanBeNegative
  */
 abstract class Expression(private val isSimplified: Boolean) {
     fun checkSimplified() = if (isSimplified) this else simplify()
     fun reciprocal() = if (isReciprocal()) (this as Exponent).base else Exponent(this, NEGATIVE_ONE, true)
-    fun negate() = if (isNegative()) (this as Product).removeNegative() else Product(listOf(NEGATIVE_ONE, this), true)
-
-    operator fun plus(other: Expression) = Sum(listOf(this, other))
-    operator fun minus(other: Expression) = this + other.negate()
-    operator fun times(other: Expression) = Product(listOf(this, other))
-    operator fun div(other: Expression) = this * other.reciprocal()
-
     fun plus(other: Expression, isSimplified: Boolean) = Sum(listOf(this, other), isSimplified)
     fun minus(other: Expression, isSimplified: Boolean) = Sum(listOf(this, other.negate()), isSimplified)
     fun times(other: Expression, isSimplified: Boolean) = Product(listOf(this, other), isSimplified)
@@ -47,6 +57,29 @@ abstract class Expression(private val isSimplified: Boolean) {
     fun sqrt(isSimplified: Boolean = false) = pow(this, ONE_HALF, isSimplified)
     fun squared(isSimplified: Boolean = false) = pow(this, TWO, isSimplified)
 
+    /**
+     * Adds this expression to another. Use when the result is not guaranteed to be simplified.
+     * @see [Expression.plus]
+     */
+    operator fun plus(other: Expression) = Sum(listOf(this, other))
+
+    /**
+     * Subtracts another expression from this one. Use when the result is not guaranteed to be simplified.
+     * @see [Expression.minus]
+     */
+    operator fun minus(other: Expression) = this + other.negate()
+
+    /**
+     * Multiplies this expression to another. Use when the result is not guaranteed to be simplified.
+     * @see [Expression.times]
+     */
+    operator fun times(other: Expression) = Product(listOf(this, other))
+
+    /**
+     * Divides this expression by another. Use when the result is not guaranteed to be simplified
+     */
+    operator fun div(other: Expression) = this * other.reciprocal()
+    abstract fun evaluate(digits: Int): Expression
     abstract fun simplify(): Expression
     abstract fun factor(): Expression
 
@@ -77,6 +110,14 @@ abstract class Expression(private val isSimplified: Boolean) {
      * Second: the base when this expression is expressed as an exponent using the integer power
      */
     open fun isolateIntPower() = Pair(1, this)
+
+    private fun negate(): Expression {
+        return if (this is CanBeNegative && isNegative()) {
+            removeNegative()
+        } else {
+            Product(listOf(NEGATIVE_ONE, this), true)
+        }
+    }
 
     companion object {
         val NEGATIVE_ONE = Value(BigDecimal(-1))

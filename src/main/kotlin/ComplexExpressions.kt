@@ -20,10 +20,10 @@ abstract class ComplexExpression(val members: ExpressionList, isSimplified: Bool
  * for ease-of-coding and efficiency.
  * @see Sum
  */
-class Product(members: ExpressionList, isSimplified: Boolean = false) : ComplexExpression(members, isSimplified) {
+class Product(members: ExpressionList, isSimplified: Boolean = false) : ComplexExpression(members, isSimplified), CanBeNegative {
     override fun isNegative() = members.contains(NEGATIVE_ONE)
 
-    fun removeNegative(): Expression {
+    override fun removeNegative(): Expression {
         val newMembers = members - NEGATIVE_ONE
         if (newMembers.isEmpty()) {
             return ONE

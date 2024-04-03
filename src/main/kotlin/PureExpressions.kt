@@ -8,17 +8,20 @@ import java.math.BigDecimal
 abstract class PureExpression : Expression(true) {
     final override fun simplify() = this
     final override fun factor() = this
+    final override fun evaluate(digits: Int) = this
 }
 
 /**
  * A rational number.
  */
-class Value(val value: BigDecimal) : PureExpression() {
+class Value(val value: BigDecimal) : PureExpression(), CanBeNegative {
     override fun substitute(vars: VariableTable) = this
     override fun coefficient() = value
     override fun equals(other: Any?) = strictEquals(other) { value equals it.value }
     override fun hashCode() = value.hashCode()
     override fun toString() = value.toString()  // Debug
+    override fun isNegative() = value < BigDecimal.ZERO
+    override fun removeNegative() = Value(-value)
 }
 
 /**

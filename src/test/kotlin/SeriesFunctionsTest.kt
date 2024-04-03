@@ -1,10 +1,11 @@
 import org.junit.jupiter.api.Test
+import java.math.BigDecimal
 import kotlin.test.assertEquals
 
-class ElementaryFunctions {
+class SeriesFunctionsTest {
     @Test
     fun sin() {
-        assertEquals(sin(PI))
+        assertEquals(sin(BigDecimal.TEN), BigDecimal)
     }
 
     @Test
