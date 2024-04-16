@@ -1,0 +1,1 @@
+typealias VariableTable = Map<Char, SimpleExpression>

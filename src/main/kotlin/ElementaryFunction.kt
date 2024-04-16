@@ -1,5 +1,4 @@
-import java.math.BigDecimal
-
+/*
 class ElementaryFunction(var value: Expression, isSimplified: Boolean = false) : Expression(isSimplified) {
     override fun simplify(): Expression {
         TODO("Not yet implemented")
@@ -17,6 +16,8 @@ class ElementaryFunction(var value: Expression, isSimplified: Boolean = false) :
 
     override fun hashCode() = value.hashCode()
 }
+
+ */
 
 // gamma
 // sin
