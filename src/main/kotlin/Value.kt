@@ -13,7 +13,7 @@ open class Value(open val value: BigDecimal) : PureExpression(), CanBeNegative {
     override fun isNegative() = value < BigDecimal.ZERO
     override fun removeNegative() = Value(-value)
 
-    override fun evaluateAsFraction(precision: Int) = value
+    override fun toFraction() = Fraction(value)
 
     override fun equals(other: Any?) = strictEquals(other) { value isValue it.value }
     override fun hashCode() = value.hashCode()

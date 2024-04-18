@@ -15,17 +15,17 @@ open class Sum(members: ExpressionList) : ComplexExpression(members) {
         if (members.size == 1) {
             return members.single().ensureSimplified(foilPower)
         }
-        val termsToCoeffs = mutableMapOf<SimpleExpression, MutableBigDecimal>()
+        val termsToCoeffs = mutableMapOf<SimpleExpression, BigDecimalReference>()
         flattenMembers()
             .isolateInstances<Value>()    // Simplify rational values (constants)
             .withFirst { constants -> constants
                 .forEach { constant ->
-                    termsToCoeffs.mutablePut(Expression.ONE, ::MutableBigDecimal) { it.value += constant.value }
+                    termsToCoeffs[Expression.ONE] = termsToCoeffs[Expression.ONE] +! constant.value
                 }
             }
             .withSecond { terms -> terms
                 .forEach { term ->
-                    termsToCoeffs.mutablePut(term, ::MutableBigDecimal) { it.value += BigDecimal.ONE }
+                    termsToCoeffs[Expression.ONE] = termsToCoeffs[Expression.ONE] +! BigDecimal.ONE
                 }
             }
         return SimpleSum(termsToCoeffs.map { (factor, coeff) ->
@@ -192,7 +192,7 @@ private fun List<SimpleExpressionList>.toPowerMapList(): PowerMapList {
                 .mutableFold(mutableMapOf<Int, MutableList<SimpleExpression>>()) { factor -> factor
                     .isolateIntPower()
                     .withBoth { intPower, base ->
-                        mutablePut(intPower, { mutableListOf() }) { it.add(base) }
+                        this[intPower] = this[intPower] +! base
                     }
                 }
             add(powerMap)

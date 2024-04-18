@@ -50,9 +50,9 @@ open class Product(members: ExpressionList) : ComplexExpression(members), CanBeN
             .withSecond { factors -> factors  // Simplify exponents of like bases; x^a * x^b = x^(a+b)
                 .mutableFold(mutableMapOf<SimpleExpression, MutableList<Expression>>()) { factor ->
                     if (factor is SimpleExponent) { // Simplify
-                        mutablePut(factor.base, ::mutableListOf) { powerSum -> powerSum.add(factor.power) }
+                        this[factor.base] = this[factor.base] +! factor.power
                     } else {    // Multiply as-is
-                        mutablePut(factor, ::mutableListOf) { powerSum -> powerSum.add(ONE) }
+                        this[factor] = this[factor] +! ONE
                     }
                 }
                 .forEach { (base, powerSum) ->
@@ -152,12 +152,13 @@ class SimpleProduct(override val members: SimpleExpressionList) : Product(member
         return Product(newMembers).simplify(foilPower)
     }
 
-    /**
-     * @return decimal value of this when evaluated as a [Fraction]
-     * @throws ClassCastException caller was not created from a Fraction
-     */
-    override fun evaluateAsFraction(precision: Int): BigDecimal {
-        val context = MathContext(precision, RoundingMode.HALF_UP)
-        return (members[0] as Value).value.divide(((members[1] as SimpleExponent).base as Value).value, context)
+    override fun toFraction(): Fraction {
+        try {
+            val numer = (members[0] as Value).value
+            val denom = ((members[1] as SimpleExponent).base as Value).value
+            return Fraction(numer, denom)
+        } catch (e: ClassCastException) {
+            throw IllegalCallerException("Caller is not a valid Fraction", e)
+        }
     }
 }

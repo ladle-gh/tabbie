@@ -10,13 +10,38 @@ import java.math.RoundingMode
  */
 object Constants {
     val TWO = 2.toBigDecimal()
+    val FOUR = 4.toBigDecimal()
     val NEGATIVE_ONE = -BigDecimal.ONE
     val ROUGHLY_TWO_PI = TWO * BigDecimal("3.141592653589793")
     val WHOLE_POWER_MAX = BigDecimal(999999999)
     val INT_MAX = Int.MAX_VALUE.toBigInteger()
 }
 
-class MutableBigDecimal(var value: BigDecimal = BigDecimal.ZERO)
+class BigDecimalReference(var value: BigDecimal = BigDecimal.ZERO) : AbstractMutableCollection<BigDecimal>() {
+    override val size = 1
+
+    override fun iterator(): MutableIterator<BigDecimal> = object : MutableIterator<BigDecimal> {
+        var iteratedOver = false
+        override fun hasNext() = iteratedOver
+        override fun next() = value.also { iteratedOver = true }
+        override fun remove() {}
+    }
+
+    override fun add(element: BigDecimal) = true.also { value += element }
+}
+
+operator fun BigDecimalReference?.plus(other: AddOrModify<BigDecimal>): BigDecimalReference {
+    return this?.apply { value += other.value } ?: BigDecimalReference(other.value)
+}
+
+operator fun <T> MutableList<T>?.plus(other: AddOrModify<out T>): MutableList<T> {
+    return this?.apply { add(other.value) } ?: mutableListOf(other.value)
+}
+
+@JvmInline
+value class AddOrModify<T>(val value: T)
+
+operator fun <T> T.not() = AddOrModify(this)
 
 /**
  * Alternative to [BigDecimal.equals] that compares ONLY the value of the BigDecimal.

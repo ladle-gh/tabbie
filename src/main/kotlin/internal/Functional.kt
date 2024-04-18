@@ -9,23 +9,6 @@ import kotlin.contracts.contract
 // COLLECTIONS
 
 /**
- * Implementation of [MutableMap.put] that, if the key already exists, modifies the mutable value.
- * @param key the location of the value
- * @param initializer returns the initial value
- * @param modifier the operation to applied in the case that the entry already exists
- */
-inline fun <E, T> MutableMap<E, T>.mutablePut(key: E, initializer: () -> T, modifier: (T) -> Unit) {
-    val value = this[key]
-    if (value != null) {
-        modifier(value)
-        return
-    }
-    val initial = initializer()
-    modifier(initial)
-    this[key] = initial
-}
-
-/**
  * Implementation of [Iterable.fold] that returns the same object for each iteration. Instead of returning a new object
  * each time, the same object is reused and modified.
  * @param initial the object to be modified

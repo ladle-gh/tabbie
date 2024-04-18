@@ -181,8 +181,8 @@ interface SimpleExpression : Expression {
     /**
      * TODO add description
      */
-    fun evaluateAsFraction(precision: Int): BigDecimal {
-        throw IllegalCallerException("Fraction.toExpression() cannot return a SimpleExponent")
+    fun toFraction(): Fraction {
+        throw IllegalCallerException("Calling type can never be a valid Fraction")
     }
 }
 

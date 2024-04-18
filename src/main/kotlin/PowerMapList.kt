@@ -1,6 +1,4 @@
-import internal.isolateIndexIn
-import internal.mutablePut
-import internal.withBoth
+import internal.*
 
 /**
  * A list representing the terms in a sum (or in other words, a polynomial).
@@ -40,7 +38,7 @@ fun PowerMapList.getCommonBases(intPower: Int): Map<SimpleExpression, List<Int>>
     val bases = mutableMapOf<SimpleExpression, MutableList<Int>>()
     forEachIndexed { termIndex, mapping ->
         mapping[intPower]?.forEach { base ->
-            bases.mutablePut(base, { mutableListOf() }) { it.add(termIndex) }
+            bases[base] = bases[base] +! termIndex
         }
     }
     return bases
