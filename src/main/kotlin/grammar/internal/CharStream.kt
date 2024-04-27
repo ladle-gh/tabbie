@@ -5,30 +5,23 @@ package grammar.internal
  */
 internal class CharStream(private val source: String) {
     private var curPosition = 0
-    private var savedPositions = MutableIntVector()
 
     fun next() = peek().also { ++curPosition }
 
-    fun savePosition() {
-        savedPositions.push(curPosition)
-    }
-
     fun substring(size: Int): String {
-        return source.substring(curPosition - size, curPosition)
-    }
-
-    fun revertPosition() {
         try {
-            curPosition = savedPositions.pop()
-        } catch (e: NoSuchElementException) {
-            throw IllegalStateException("No positions are currently marked", e)
+            return source.substring(curPosition - size, curPosition)
+        } catch (e: StringIndexOutOfBoundsException) {  // Impossible
+            throw StreamTerminator
         }
     }
 
-    fun peek() = try {
-        source[curPosition]
-    } catch (e: IndexOutOfBoundsException) {
-        throw StreamTerminator
+    fun peek(): Char {
+        try {
+            return source[curPosition]
+        } catch (e: IndexOutOfBoundsException) {
+            throw StreamTerminator
+        }
     }
 
     fun advancePosition(places: Int) {
