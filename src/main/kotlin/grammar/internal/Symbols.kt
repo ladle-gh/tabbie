@@ -272,20 +272,6 @@ private object ID {
 }
 
 /**
- * Used only in [Token] to describe the origin of NOTHING and EMPTY.
- */
-internal class OriginMarker private constructor(id: String) : Symbol(id) {
-    override fun attemptMatch(input: CharStream, skip: Symbol, recursions: MutableList<String>): Nothing {
-        throw UnsupportedOperationException("Call from NOTHING or EMPTY")
-    }
-
-    companion object {
-        val NOTHING = OriginMarker("__nothing__")
-        val EMPTY = OriginMarker("__empty__")
-    }
-}
-
-/**
  * Optimization of "\[-]". May be implicitly defined.
  */
 internal class AnyCharacter(id: String = ID.next()) : Symbol(id) {
@@ -310,6 +296,6 @@ internal class ImplicitSymbol(id: String = ID.next()) : Symbol(id) {
 /**
  * Used only in [Symbol] as a "skip" symbol during each skip.
  */
-private data object ZeroLengthSymbol : Symbol() {
+internal data object ZeroLengthSymbol : Symbol() {
     override fun attemptMatch(input: CharStream, skip: Symbol, recursions: MutableList<String>) = ContextFreeToken.EMPTY
 }

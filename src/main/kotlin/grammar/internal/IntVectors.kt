@@ -2,18 +2,18 @@ package grammar.internal
 
 import kotlin.NoSuchElementException
 
-fun vectorOf(c: Char): IntVector = SingletonIntVector(c.code)
+internal fun vectorOf(c: Char): IntVector = SingletonIntVector(c.code)
 
-fun vectorOf(vararg c: Char): IntVector {
+internal fun vectorOf(vararg c: Char): IntVector {
     val nArray = IntArray(c.size)
     c.indices.forEach { nArray[it] = c[it].code }
     return ArrayIntVector(nArray)
 }
 
 /**
- * An array of integers. Implementations allow for modification without need to reallocate the underlying array.
+ * Optimization of [List] for integers.
  */
-sealed interface IntVector {
+internal sealed interface IntVector {
     val size: Int
     val indices: IntRange
 
@@ -23,7 +23,7 @@ sealed interface IntVector {
     operator fun get(index: Int): Int
 }
 
-open class ArrayIntVector : IntVector {
+internal open class ArrayIntVector : IntVector {
     final override var size: Int
         protected set
     final override val indices get() = data.indices
@@ -68,7 +68,7 @@ open class ArrayIntVector : IntVector {
     }
 }
 
-class MutableIntVector(size: Int = DEFAULT_SIZE) : ArrayIntVector(size) {
+internal class MutableIntVector(size: Int = DEFAULT_SIZE) : ArrayIntVector(size) {
     fun push(c: Char) = push(c.code)
 
     fun push(n: Int) {

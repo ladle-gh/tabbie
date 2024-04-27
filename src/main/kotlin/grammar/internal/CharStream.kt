@@ -1,5 +1,8 @@
 package grammar.internal
 
+/**
+ * Incrementally iterates through a [String] with the ability to move the position of the iterator.
+ */
 internal class CharStream(private val source: String) {
     private var curPosition = 0
     private var savedPositions = MutableIntVector()

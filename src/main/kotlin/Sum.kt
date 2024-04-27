@@ -207,7 +207,7 @@ private fun List<List<SimpleExpression>>.toPowerMapList(): PowerMapList {
 
 private fun <T : Map<Int, List<SimpleExpression>>> List<T>.toExpression(): SimpleExpression {
     val sumMembers = accumulate(mutableListOf<Expression>()) { powerMap ->
-        val termMembers = powerMap.asIterable().mutableFold(mutableListOf<Expression>()) inner@{ (intPower, bases) ->
+        val termMembers = powerMap.asIterable().accumulate(mutableListOf<Expression>()) inner@{ (intPower, bases) ->
             if (intPower != 1) {
                 bases.forEach { this@inner.add(Exponent(it, Value(intPower.toBigDecimal()))) }
             } else {
