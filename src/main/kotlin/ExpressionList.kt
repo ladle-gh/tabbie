@@ -1,19 +1,28 @@
 import internal.withBoth
 import java.math.BigDecimal
 
+/**
+ * Represents members in a [ComplexExpression].
+ */
 typealias ExpressionList = List<Expression>
-typealias SimpleExpressionList = List<SimpleExpression>
-typealias SimpleExpressionPair = Pair<SimpleExpression,SimpleExpression>
 
 /**
- * @return First: the [coefficient][SimpleExpression.coefficient]; Second: all other expressions in member list
+ * Represents members in a [SimpleComplexExpression].
+ */
+typealias SimpleExpressionList = List<SimpleExpression>
+
+typealias SimpleExpressionPair = Pair<SimpleExpression,SimpleExpression>
+typealias SimpleExpressionTriple = Triple<SimpleExpression,SimpleExpression,SimpleExpression>
+
+/**
+ * @return First: the [coefficient][SimpleExpression.isolateCoeff]; Second: all other expressions in member list
  */
 fun SimpleExpressionList.isolateCoeffNumer(): Pair<BigDecimal, SimpleExpressionList> {
     return isolateInstances<Value>().withBoth { vals, nonvals -> vals.multiplyAll { it.value } to  nonvals }
 }
 
 /**
- * @return First: the [coefficient][SimpleExpression.coefficient]; Second: all other expressions in member list
+ * @return First: the [coefficient][SimpleExpression.isolateCoeff]; Second: all other expressions in member list
  */
 fun SimpleExpressionList.isolateCoeffDenom(): Pair<BigDecimal, SimpleExpressionList> {
     return partition { it.isReciprocal() }  // Simplify reciprocals of rational values (denominators); 1/a * 1/b = 1/(ab)

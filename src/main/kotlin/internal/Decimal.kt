@@ -34,8 +34,13 @@ operator fun BigDecimalReference?.plus(other: AddOrModify<BigDecimal>): BigDecim
     return this?.apply { value += other.value } ?: BigDecimalReference(other.value)
 }
 
+@JvmName("mutablePlus")
 operator fun <T> MutableList<T>?.plus(other: AddOrModify<out T>): MutableList<T> {
     return this?.apply { add(other.value) } ?: mutableListOf(other.value)
+}
+
+operator fun <T> List<T>?.plus(other: AddOrModify<out T>): List<T> {
+    return this?.let { this + other.value } ?: listOf(other.value)
 }
 
 @JvmInline

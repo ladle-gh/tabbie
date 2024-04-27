@@ -74,7 +74,7 @@ open class Product(members: ExpressionList) : ComplexExpression(members), CanBeN
                 val fracCoeff = if (coeffDenom isValue BigDecimal.ONE) {
                     Value(coeffNumer)
                 } else {
-                    Value(coeffNumer) simpleTimes Value(coeffDenom).simplePow(NEGATIVE_ONE)
+                    Fraction(coeffNumer, coeffDenom).toExpression()
                 }
                 result.add(fracCoeff)
             }
@@ -160,5 +160,9 @@ class SimpleProduct(override val members: SimpleExpressionList) : Product(member
         } catch (e: ClassCastException) {
             throw IllegalCallerException("Caller is not a valid Fraction", e)
         }
+    }
+
+    companion object {
+        val NO_MEMBERS = SimpleProduct(listOf())
     }
 }

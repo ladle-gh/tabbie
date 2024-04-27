@@ -25,14 +25,14 @@ open class Sum(members: ExpressionList) : ComplexExpression(members) {
             }
             .withSecond { terms -> terms
                 .forEach { term ->
-                    termsToCoeffs[Expression.ONE] = termsToCoeffs[Expression.ONE] +! BigDecimal.ONE
+                    termsToCoeffs[term] = termsToCoeffs[term] +! BigDecimal.ONE
                 }
             }
-        return SimpleSum(termsToCoeffs.map { (factor, coeff) ->
+        return SimpleSum(termsToCoeffs.map { (term, coeff) ->
             when {
-                factor == Expression.ONE -> Value(coeff.value)
-                coeff.value isValue BigDecimal.ONE -> factor // 1x = x
-                else -> Value(coeff.value) simpleTimes factor
+                term == Expression.ONE -> Value(coeff.value)
+                coeff.value isValue BigDecimal.ONE -> term  // 1x = x
+                else -> Value(coeff.value) simpleTimes term
             }
         })
     }
@@ -47,7 +47,7 @@ open class Sum(members: ExpressionList) : ComplexExpression(members) {
         fun SimpleExpressionPair.quadraticFactor(): SimpleExpressionPair {
             fun getQuadraticFactor(
                 x: SimpleExpression,
-                abc: Triple<SimpleExpression,SimpleExpression,SimpleExpression>
+                abc: SimpleExpressionTriple
             ): SimpleExpression {
                 val vars = mapOf(
                     'x' to x,           'a' to abc.first,
@@ -56,6 +56,7 @@ open class Sum(members: ExpressionList) : ComplexExpression(members) {
                 val firstFactor = (X simpleMinus QUADRATIC_POSITIVE).substitute(vars)
                 //TODO debug
                 println(QUADRATIC_POSITIVE.substitute(vars))
+                println(QUADRATIC_NEGATIVE.substitute(vars))
                 val secondFactor = (X simpleMinus QUADRATIC_NEGATIVE).substitute(vars)
                 val a = A.substitute(vars)
                 return if (a == Expression.ONE) {
@@ -65,13 +66,16 @@ open class Sum(members: ExpressionList) : ComplexExpression(members) {
                 }
             }
 
+            /**
+             * @return First:
+             */
             fun tryQuadraticFactor(
                 mappings: PowerMapList,
                 desiredBase: SimpleExpression,
                 termIndices: List<Int>
-            ): Pair<SimpleExpression, Triple<PowerMapList,PowerMapList,PowerMapList>> {
-                val a: PowerMapList    // All to be multiplied by x^2
-                val b: PowerMapList    // All to be multiplied by x
+            ): Pair<SimpleExpression, PowerMapListTriple> {
+                val a: PowerMapList    // Sequence to be multiplied by x^2
+                val b: PowerMapList    // Sequence to be multiplied by x
                 var remaining: PowerMapList
                 mappings    // Factor out x^2
                     .factorOut(2, desiredBase, termIndices)
@@ -89,7 +93,6 @@ open class Sum(members: ExpressionList) : ComplexExpression(members) {
                         listOf()
                     }
                 }
-
                 return (remaining - c.toSet()).toExpression() to Triple(a, b, c)
             }
 
@@ -118,7 +121,7 @@ open class Sum(members: ExpressionList) : ComplexExpression(members) {
             return this
         }
 
-        return gcfFactor(flattenMembers(), true)
+        return gcfFactor(flattenMembers(), includeVarExpr = true)
         //.syntheticFactor()
            .quadraticFactor().let { (x, _) -> (x)}
 
@@ -152,7 +155,7 @@ class SimpleSum(override val members: SimpleExpressionList) : Sum(members), Simp
     override fun substitute(vars: VariableTable) = Sum(members.map { it.substitute(vars) }).simplify()
 
     override fun isolateCoeff(): Pair<BigDecimal,SimpleExpression> {
-        val gcfFactored = gcfFactor(members, false)
+        val gcfFactored = gcfFactor(members,  includeVarExpr = false)
         if (gcfFactored.first != Expression.ONE) { // Coefficient (GCF) exists
             if (gcfFactored.first is Value) {
                 return (gcfFactored.first as Value).value to gcfFactored.second
@@ -277,8 +280,7 @@ private fun gcfFactor(simpleMembers: SimpleExpressionList, includeVarExpr: Boole
                         }
                         if (gcfPower != minPower) { // Factoring does not remove factor entirely
                             val residualPower = gcfPower - minPower
-                            val bases = powerMap[residualPower]
-                            powerMap[residualPower] = bases?.plus(uniqueTermFactor) ?: listOf(uniqueTermFactor)
+                            powerMap[residualPower] = powerMap[residualPower] +! uniqueTermFactor
                         } else if (powerMap.isEmpty()) {
                             powerMap[1] = ONLY_ONE
                         }
@@ -287,21 +289,25 @@ private fun gcfFactor(simpleMembers: SimpleExpressionList, includeVarExpr: Boole
             }
         gcfVarExpr = SimpleProduct(gcfFactors)
     } else {
-        gcfVarExpr = Expression.ONE
+        gcfVarExpr = SimpleProduct.NO_MEMBERS
     }
-    if (gcfNumer.first isNotValue BigDecimal.ONE) {
-        powerMaps.forEach { it[1] = (it[1] ?: listOf()) + Value(gcfNumer.first) }    // Distribute residual decimals
-    }
-    if (gcfDenom.first isNotValue BigDecimal.ONE) {
-        powerMaps.forEach { it[-1] = (it[-1] ?: listOf()) + Value(gcfDenom.first) }
-    }
-    val inside = powerMaps.toExpression()
     return if (
-        gcfVarExpr != Expression.ONE ||
+        gcfVarExpr != SimpleProduct.NO_MEMBERS ||
         gcfNumer.first isNotValue BigDecimal.ONE ||
         gcfDenom.first isNotValue BigDecimal.ONE
     ) {
-        val gcf = product(Value(gcfNumer.first),  Value(gcfDenom.first).simpleReciprocal(), gcfVarExpr).simplify()
+        for ((index, powerMap) in powerMaps.withIndex()) {  // Distribute residual constants
+            val numer = gcfNumer.second[index]
+            val denom = gcfDenom.second[index]
+            if (numer isNotValue BigDecimal.ONE) {
+                powerMap[1] = powerMap[1] +! Value(numer)
+            }
+            if (denom isNotValue BigDecimal.ONE) {
+                powerMap[-1] = powerMap[-1] +! Value(denom)
+            }
+        }
+        val inside = powerMaps.toExpression()
+        val gcf = Fraction(gcfNumer.first ,gcfDenom.first).toExpression() simpleTimes gcfVarExpr
         gcf to inside
     } else {
         Expression.ONE to SimpleSum(simpleMembers)

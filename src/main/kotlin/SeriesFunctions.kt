@@ -12,30 +12,6 @@ import java.math.BigDecimal
 import java.math.MathContext
 import java.math.RoundingMode
 
-private object Factorial {
-    private val factorialCache = mutableListOf<BigDecimal>(BigDecimal.ONE)
-
-    /**
-     * @param x some positive integer
-     */
-    fun of(x: Int): BigDecimal {
-        if (factorialCache.size >= x) {
-            return factorialCache[x - 1]
-        }
-        var result = factorialCache.last()
-        repeat (x - factorialCache.size) {
-            result *= (factorialCache.size + 1).toBigDecimal()
-            factorialCache += result
-        }
-        return result
-    }
-}
-
-// Special cases, pi and stuff, handled in ElementaryFunction
-private fun neg1Pow(x: Int): BigDecimal = if (x % 2 == 0) BigDecimal.ONE else Constants.NEGATIVE_ONE
-
-
-
 /**
  * If [power] is greater than [Constants.WHOLE_POWER_MAX], the result is x^WHOLE_POWER_MAX*x^(n - WHOLE_POWER_MAX).
  * @return the result of the specified exponentiation in symbolic form
@@ -55,14 +31,14 @@ fun BigDecimal.pow(power: BigDecimal, precision: Int): SimpleExpression {
     return (exp(ln * fracPart, precision) * this.pow(intPart.toInt())).toExpression()
 }
 
-internal fun sin(x: Fraction, precision: Int) = series(x % ROUGHLY_TWO_PI, precision,
+fun sin(x: Fraction, precision: Int) = series(x % ROUGHLY_TWO_PI, precision,
     getNumer = { neg1Pow(it) },
     getDenom = { Factorial.of(2*it + 1) },
     pow0 = 1,
     powStep = 2
 )
 
-internal fun cos(x: Fraction, precision: Int) = series(x % ROUGHLY_TWO_PI, precision,
+fun cos(x: Fraction, precision: Int) = series(x % ROUGHLY_TWO_PI, precision,
     getNumer = { neg1Pow(it) },
     getDenom = { Factorial.of(2*it) },
     pow0 = 0,
@@ -94,14 +70,14 @@ fun exp(x: Fraction, precision: Int) = series(x, precision,
     powStep = 1
 )
 
-internal fun log(x: Fraction, precision: Int) = series(x - Fraction.ONE, precision,
+fun log(x: Fraction, precision: Int) = series(x - Fraction.ONE, precision,
     getNumer = { neg1Pow(it) },
     getDenom = { it.toBigDecimal() },
     pow0 = 0,
     powStep = 1
 )
 
-internal fun arcsin(x: Fraction, precision: Int) = series(x, precision,
+fun arcsin(x: Fraction, precision: Int) = series(x, precision,
     getNumer = { Factorial.of(2*it) },
     getDenom = {
         val square = Constants.TWO.pow(it) * Factorial.of(it)
@@ -121,6 +97,36 @@ fun arctan(x: Fraction, precision: Int) = series(x, precision,
     pow0 = 1,
     powStep = 2
 )
+
+private object Factorial {
+    private val factorialCache = mutableListOf<BigDecimal>(BigDecimal.ONE)
+
+    /**
+     * @param x some positive integer
+     */
+    fun of(x: Int): BigDecimal {
+        if (factorialCache.size >= x) {
+            return try {
+                factorialCache[x - 1]
+            } catch (e: IndexOutOfBoundsException) {    // x < 1
+                throw ArithmeticException("Non-positive integer supplied to factorial function")
+            }
+        }
+        var result = factorialCache.last()
+        repeat (x - factorialCache.size) {
+            result *= (factorialCache.size + 1).toBigDecimal()
+            factorialCache += result
+        }
+        return result
+    }
+}
+
+/**
+ * Describes an alternating series.
+ * @param x the iteration number of the current point in the series
+ * @return -1^[x]
+ */
+private fun neg1Pow(x: Int): BigDecimal = if (x % 2 == 0) BigDecimal.ONE else Constants.NEGATIVE_ONE
 
 /**
  * Influenced by [https://github.com/eobermuhlner/big-math/blob/master/ch.obermuhlner.math.big/src/
@@ -143,7 +149,7 @@ fun arctan(x: Fraction, precision: Int) = series(x, precision,
  * @param powStep 1 or 2; the difference between subsequent powers x is raised to
  * @see pow
  */
-inline fun series(
+private fun series(
     x: Fraction,
     precision: Int,
     getNumer: (Int) -> BigDecimal,

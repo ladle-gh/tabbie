@@ -36,17 +36,17 @@ inline fun <E> Iterable<E>.isolate(predicate: (E) -> Boolean): Pair<List<E>, Lis
 }
 
 fun <E> Iterable<E>.isolateIndexIn(indexes: Iterable<Int>): Pair<List<E>, List<E>> {
-    val remaining = mutableListOf<E>()
     for ((i, member) in withIndex()) {
         if (i in indexes) {
-            return listOf(member) to remaining
-        } else {
-            remaining.add(member)
+            return listOf(member) to (this - member)
         }
     }
-    return listOf<E>() to remaining
+    return listOf<E>() to this.toList()
 }
 
+inline fun <T : U, U> T.letIf(condition: Boolean, block: (T) -> U): U {
+    return if (condition) block(this) else this
+}
 
 // PAIR
 
