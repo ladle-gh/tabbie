@@ -185,10 +185,10 @@ internal class Star(inner: Symbol) : Symbol() {
 }
 
 /**
- * Symbol created by definition of a character switch (e.g. [a-zA-Z]).
- * For up-to ranges (e.g. [-z]), [lowerBounds] will store [Char.MIN_VALUE].
- * For at-least ranges (e.g. [a-]), [upperBounds] will store [Char.MAX_VALUE].
- * For single characters (e.g. [ab-c]), the lower and upper bounds will be the same.
+ * Symbol created by definition of a character switch (e.g. \[a-zA-Z]).
+ * For up-to ranges (e.g. \[-z]), [lowerBounds] will store [Char.MIN_VALUE].
+ * For at-least ranges (e.g. \[a-]), [upperBounds] will store [Char.MAX_VALUE].
+ * For single characters (e.g. \[ab-c]), the lower and upper bounds will be the same.
  * May be implicitly defined.
  */
 internal class Switch(
@@ -256,27 +256,9 @@ internal class Character(id: String = ID.next(), private val acceptable: Char) :
     }
 }
 
-/**
- * TODO document
- */
-private inline fun <E, T> Iterable<E>.anyNot(not: T, transform: (E) -> T): T {
-    for (member in this) {
-        val result = transform(member)
-        if (result != not) {
-            return result
-        }
-    }
-    return not
-}
-
-private object ID {
-    private var counter = 0
-
-    fun next() = counter.toString().also { ++counter }  // Synchronization not necessary
-}
 
 /**
- * Optimization of "\[-]". May be implicitly defined.
+ * A catch-all switch literal (e.g. \[-]).
  */
 internal class AnyCharacter(id: String = ID.next()) : Symbol(id) {
     override fun attemptMatch(input: CharStream, skip: Symbol, recursions: MutableList<String>): ContextFreeToken {
@@ -298,8 +280,27 @@ internal class ImplicitSymbol(id: String = ID.next()) : Symbol(id) {
 }
 
 /**
- * Used only in [Symbol] as a "skip" symbol during each skip.
+ * Special rule for internal API usage.
  */
 internal data object ZeroLengthSymbol : Symbol() {
     override fun attemptMatch(input: CharStream, skip: Symbol, recursions: MutableList<String>) = ContextFreeToken.EMPTY
+}
+
+/**
+ * @return the first member in this that is not the specified value, if it exists; else, the value
+ */
+private inline fun <E, T> Iterable<E>.anyNot(not: T, transform: (E) -> T): T {
+    for (member in this) {
+        val result = transform(member)
+        if (result != not) {
+            return result
+        }
+    }
+    return not
+}
+
+private object ID {
+    private var counter = 0
+
+    fun next() = counter.toString().also { ++counter }  // Synchronization not necessary
 }

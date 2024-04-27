@@ -3,6 +3,9 @@ package grammar
 
 import grammar.internal.*
 
+// TODO test
+// TODO move to seperate repository
+
 /**
  * Provides the primary functionality of the API.
  * @return a context-free grammar with the given definition and specifications
