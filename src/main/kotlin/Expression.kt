@@ -160,7 +160,7 @@ interface SimpleExpression : Expression {
      * @return the simplified form of this expression when the given substitutions are made
      * @see VariableTable
      */
-    fun substitute(vars: VariableTable): SimpleExpression
+    fun substitute(vars: Map<Char, SimpleExpression>): SimpleExpression
 
     /**
      * Optimized for use in [Expression.div]
@@ -170,13 +170,13 @@ interface SimpleExpression : Expression {
     /**
      * @return decimal coefficient (not including [Exponents][Exponent] which cannot be simplified further)
      */
-    fun isolateCoeff(): Pair<BigDecimal, SimpleExpression>
+    fun partitionCoeff(): Pair<BigDecimal, SimpleExpression>
 
     /**
      * @return First: the integer power of this expression;
      * Second: the base when this expression is expressed as an exponent using the integer power
      */
-    fun isolateIntPower(): Pair<Int, SimpleExpression>
+    fun partitionIntPower(): Pair<Int, SimpleExpression>
 
     /**
      * TODO add description
@@ -215,7 +215,7 @@ abstract class PureExpression : SimpleExpression {
     final override fun factor() = this
     final override fun evaluate(precision: Int, foilPower: Int) = this
 
-    final override fun isolateIntPower() = 1 to this
+    final override fun partitionIntPower() = 1 to this
     final override fun isReciprocal() = false
 }
 
@@ -227,10 +227,10 @@ abstract class PureExpression : SimpleExpression {
  * @see Product
  * @see Sum
  */
-abstract class ComplexExpression(open val members: ExpressionList) : Expression
+abstract class ComplexExpression(open val members: List<Expression>) : Expression
 
 interface SimpleComplexExpression : SimpleExpression {
-    val members: SimpleExpressionList
+    val members: List<SimpleExpression>
 
     fun flatten(): SimpleComplexExpression
 }

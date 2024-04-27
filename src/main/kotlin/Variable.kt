@@ -20,12 +20,12 @@ class Variable : PureExpression {
         }
     }
 
-    override fun substitute(vars: VariableTable): SimpleExpression {
+    override fun substitute(vars: Map<Char, SimpleExpression>): SimpleExpression {
         vars.forEach { (varl, sub) -> if (id == varl) return sub }
         return this
     }
 
-    override fun isolateCoeff() = BigDecimal.ONE to this
+    override fun partitionCoeff() = BigDecimal.ONE to this
 
     override fun equals(other: Any?) = strictEquals(other) { id == it.id }
     override fun hashCode() = id.hashCode()

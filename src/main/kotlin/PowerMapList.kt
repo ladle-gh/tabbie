@@ -24,10 +24,10 @@ fun PowerMapList.factorOut( // FIXME a and b bug here
         isolateIndexIn(termIndices)
     }
     return possible
-        .withBoth { termsToFactor, intact ->
+        .let { (termsToFactor, intact) ->
             val factored = termsToFactor.map { term -> term
                 .mapValues { (curIntPower, bases) ->    // Remove x
-                    bases.letIf(curIntPower == intPower) { (it - base).ifEmpty { listOf(Expression.ONE) } }
+                    if (curIntPower == intPower) (bases - base).ifEmpty { listOf(Expression.ONE) } else bases
                 }
             }
             factored to intact

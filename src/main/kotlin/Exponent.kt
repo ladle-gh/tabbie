@@ -76,8 +76,8 @@ class SimpleExponent(
     override val power: SimpleExpression
 ) : Exponent(base, power), SimpleExpression {
     override fun isReciprocal() = base is Value && power == NEGATIVE_ONE
-    override fun isolateCoeff() = BigDecimal.ONE to this
-    override fun substitute(vars: VariableTable) = base.substitute(vars).pow(power.substitute(vars)).simplify()
+    override fun partitionCoeff() = BigDecimal.ONE to this
+    override fun substitute(vars: Map<Char, SimpleExpression>) = base.substitute(vars).pow(power.substitute(vars)).simplify()
 
     override fun evaluate(precision: Int, foilPower: Int): SimpleExpression {
         val newBase = base.evaluate(precision)
@@ -91,16 +91,16 @@ class SimpleExponent(
             }
             return newBase.value.pow(newPower.value, precision)
         }
-        val (coeff, inside) = newPower.isolateCoeff()   // Evaluate fractional powers
+        val (coeff, inside) = newPower.partitionCoeff()   // Evaluate fractional powers
         if (coeff isValue BigDecimal.ONE) {
             return newBase simpleTimes newBase.simplePow(inside)
         }
         return newBase.value.pow(coeff, precision) simpleTimes newBase.simplePow(inside)
     }
 
-    override fun isolateIntPower(): Pair<Int, SimpleExpression> {
+    override fun partitionIntPower(): Pair<Int, SimpleExpression> {
         val intPower = power
-            .isolateCoeff().first
+            .partitionCoeff().first
             .integralPart().first
             .toBigInteger()
         return if (intPower > Constants.INT_MAX) {  // Treat power as part of base

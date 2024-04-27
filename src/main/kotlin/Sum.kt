@@ -10,23 +10,25 @@ import java.util.Objects.hash
  * for ease-of-coding and efficiency.
  * @see Product
  */
-open class Sum(members: ExpressionList) : ComplexExpression(members) {
+open class Sum(members: List<Expression>) : ComplexExpression(members) {
     override fun simplify(foilPower: Int): SimpleExpression {
         if (members.size == 1) {
             return members.single().ensureSimplified(foilPower)
         }
         val termsToCoeffs = mutableMapOf<SimpleExpression, BigDecimalReference>()
         flattenMembers()
-            .isolateInstances<Value>()    // Simplify rational values (constants)
-            .withFirst { constants -> constants
-                .forEach { constant ->
-                    termsToCoeffs[Expression.ONE] = termsToCoeffs[Expression.ONE] +! constant.value
-                }
+            .partitionInstancesOf<Value>()    // Simplify rational values (constants)
+            .withFirst { constants ->
+                constants
+                    .forEach { constant ->
+                        termsToCoeffs[Expression.ONE] = termsToCoeffs[Expression.ONE] + !constant.value
+                    }
             }
-            .withSecond { terms -> terms
-                .forEach { term ->
-                    termsToCoeffs[term] = termsToCoeffs[term] +! BigDecimal.ONE
-                }
+            .withSecond { terms ->
+                terms
+                    .forEach { term ->
+                        termsToCoeffs[term] = termsToCoeffs[term] + !BigDecimal.ONE
+                    }
             }
         return SimpleSum(termsToCoeffs.map { (term, coeff) ->
             when {
@@ -44,14 +46,14 @@ open class Sum(members: ExpressionList) : ComplexExpression(members) {
         q(a,b,c) = (-b+sqrt(b^2+4ac))/2a
         Q(a,b,c) = (-b-sqrt(b^2+4ac))/2a
          */
-        fun SimpleExpressionPair.quadraticFactor(): SimpleExpressionPair {
+        fun Pair<SimpleExpression, SimpleExpression>.quadraticFactor(): Pair<SimpleExpression, SimpleExpression> {
             fun getQuadraticFactor(
                 x: SimpleExpression,
-                abc: SimpleExpressionTriple
+                abc: Triple<SimpleExpression, SimpleExpression, SimpleExpression>
             ): SimpleExpression {
                 val vars = mapOf(
-                    'x' to x,           'a' to abc.first,
-                    'b' to abc.second,  'c' to abc.third
+                    'x' to x, 'a' to abc.first,
+                    'b' to abc.second, 'c' to abc.third
                 )
                 val firstFactor = (X simpleMinus QUADRATIC_POSITIVE).substitute(vars)
                 //TODO debug
@@ -89,8 +91,8 @@ open class Sum(members: ExpressionList) : ComplexExpression(members) {
                     if (isEmpty()) {
                         listOf()
                     } else {
-                        find { it[1]?.singleOrNull()?.let { base -> base is Value } ?: false }?.let { listOf(it) } ?:
-                        listOf()
+                        find { it[1]?.singleOrNull()?.let { base -> base is Value } ?: false }?.let { listOf(it) }
+                            ?: listOf()
                     }
                 }
                 return (remaining - c.toSet()).toExpression() to Triple(a, b, c)
@@ -122,8 +124,8 @@ open class Sum(members: ExpressionList) : ComplexExpression(members) {
         }
 
         return gcfFactor(flattenMembers(), includeVarExpr = true)
-        //.syntheticFactor()
-           .quadraticFactor().let { (x, _) -> (x)}
+            //.syntheticFactor()
+            .quadraticFactor().let { (x, _) -> (x) }
 
         //.binomialFactor() TODO
         //sum/difference of squares/cubes
@@ -136,7 +138,7 @@ open class Sum(members: ExpressionList) : ComplexExpression(members) {
     /**
      * @return flattened & simplified member list
      */
-    internal fun flattenMembers(): SimpleExpressionList {
+    internal fun flattenMembers(): List<SimpleExpression> {
         val flat = mutableListOf<SimpleExpression>()
         members
             .map { it.ensureSimplified() }
@@ -145,22 +147,22 @@ open class Sum(members: ExpressionList) : ComplexExpression(members) {
     }
 }
 
-class SimpleSum(override val members: SimpleExpressionList) : Sum(members), SimpleComplexExpression {
+class SimpleSum(override val members: List<SimpleExpression>) : Sum(members), SimpleComplexExpression {
     override fun flatten() = SimpleSum(flattenMembers())
 
     override fun evaluate(precision: Int, foilPower: Int): SimpleExpression {
         TODO("Not yet implemented")
     }
 
-    override fun substitute(vars: VariableTable) = Sum(members.map { it.substitute(vars) }).simplify()
+    override fun substitute(vars: Map<Char, SimpleExpression>) = Sum(members.map { it.substitute(vars) }).simplify()
 
-    override fun isolateCoeff(): Pair<BigDecimal,SimpleExpression> {
-        val gcfFactored = gcfFactor(members,  includeVarExpr = false)
+    override fun partitionCoeff(): Pair<BigDecimal, SimpleExpression> {
+        val gcfFactored = gcfFactor(members, includeVarExpr = false)
         if (gcfFactored.first != Expression.ONE) { // Coefficient (GCF) exists
             if (gcfFactored.first is Value) {
                 return (gcfFactored.first as Value).value to gcfFactored.second
             }
-            val (coeff, inside) = gcfFactored.first.isolateCoeff()
+            val (coeff, inside) = gcfFactored.first.partitionCoeff()
             return coeff to (inside simpleTimes gcfFactored.second)
         }
         return BigDecimal.ONE to this
@@ -168,16 +170,16 @@ class SimpleSum(override val members: SimpleExpressionList) : Sum(members), Simp
 
     override fun isReciprocal() = false
 
-    override fun isolateIntPower() = 1 to this
+    override fun partitionIntPower() = 1 to this
 
-    fun toTermList(): List<SimpleExpressionList> {
+    fun toTermList(): List<List<SimpleExpression>> {
         return members.map { if (it is SimpleProduct) it.members else listOf(it) }
     }
 
     // a(x + y) = ax + ay
-    fun distribute(termMembers: SimpleExpressionList): SimpleExpressionList {
+    fun distribute(termMembers: List<SimpleExpression>): List<SimpleExpression> {
         val flat = termMembers.flatMap { if (it is SimpleProduct) it.members else listOf(it) }
-        val isolateRecips = flat.isolate { it.isReciprocal() }
+        val isolateRecips = flat.partition { it.isReciprocal() }
         if (isolateRecips.first.isEmpty()) {
             return members.map { Product(flat + it).simplify() }
         }
@@ -188,23 +190,24 @@ class SimpleSum(override val members: SimpleExpressionList) : Sum(members), Simp
     }
 }
 
-private fun List<SimpleExpressionList>.toPowerMapList(): PowerMapList {
+private fun List<List<SimpleExpression>>.toPowerMapList(): PowerMapList {
     return this
-        .mutableFold(ArrayList(size)) { term ->
+        .accumulate(ArrayList(size)) { term ->
             val powerMap = term
-                .mutableFold(mutableMapOf<Int, MutableList<SimpleExpression>>()) { factor -> factor
-                    .isolateIntPower()
-                    .withBoth { intPower, base ->
-                        this[intPower] = this[intPower] +! base
-                    }
+                .accumulate(mutableMapOf<Int, MutableList<SimpleExpression>>()) { factor ->
+                    factor
+                        .partitionIntPower()
+                        .let { (intPower, base) ->
+                            this[intPower] = this[intPower] + !base
+                        }
                 }
             add(powerMap)
         }
 }
 
-private fun <T : Map<Int, SimpleExpressionList>> List<T>.toExpression(): SimpleExpression {
-    val sumMembers = mutableFold(mutableListOf<Expression>()) { powerMap ->
-        val termMembers = powerMap.asIterable().mutableFold(mutableListOf<Expression>()) inner@ { (intPower, bases) ->
+private fun <T : Map<Int, List<SimpleExpression>>> List<T>.toExpression(): SimpleExpression {
+    val sumMembers = accumulate(mutableListOf<Expression>()) { powerMap ->
+        val termMembers = powerMap.asIterable().mutableFold(mutableListOf<Expression>()) inner@{ (intPower, bases) ->
             if (intPower != 1) {
                 bases.forEach { this@inner.add(Exponent(it, Value(intPower.toBigDecimal()))) }
             } else {
@@ -232,25 +235,28 @@ private fun gcf(numbers: List<BigDecimal>): Pair<BigDecimal, List<BigDecimal>> {
 
 private val ONLY_ONE = listOf(Expression.ONE)
 
-private fun gcfFactor(simpleMembers: SimpleExpressionList, includeVarExpr: Boolean): SimpleExpressionPair {
+private fun gcfFactor(simpleMembers: List<SimpleExpression>,
+    includeVarExpr: Boolean): Pair<SimpleExpression, SimpleExpression> {
     val coeffNumers = mutableListOf<BigDecimal>()
     val coeffDenoms = mutableListOf<BigDecimal>()
-    val semiFactoredTerms = mutableListOf<SimpleExpressionList>()
+    val semiFactoredTerms = mutableListOf<List<SimpleExpression>>()
     simpleMembers
-        .isolateInstances<SimpleProduct>()
-        .withFirst { terms -> terms
-            .forEach { term -> term
-                .members
-                .isolateCoeffNumer()
-                .withFirst { coeffNumers.add(it) }
-                .second
-                .isolateCoeffDenom()
-                .withFirst { coeffDenoms.add(it) }
-                .withSecond { semiFactoredTerms.add(it) }
-            }
+        .partitionInstancesOf<SimpleProduct>()
+        .withFirst { terms ->
+            terms
+                .forEach { term ->
+                    term
+                        .members
+                        .partitionCoeffNumer()
+                        .withFirst { coeffNumers.add(it) }
+                        .second
+                        .partitionCoeffDenom()
+                        .withFirst { coeffDenoms.add(it) }
+                        .withSecond { semiFactoredTerms.add(it) }
+                }
         }
         .withSecond { nonProducts ->
-             semiFactoredTerms.addAll(nonProducts.map { listOf(it) })
+            semiFactoredTerms.addAll(nonProducts.map { listOf(it) })
         }
     val gcfNumer = gcf(coeffNumers)
     val gcfDenom = gcf(coeffDenoms)
@@ -260,8 +266,12 @@ private fun gcfFactor(simpleMembers: SimpleExpressionList, includeVarExpr: Boole
         val gcfFactors = powerMaps
             .flatMap { it.values.flatten() }
             .toSet()
-            .mutableFold(mutableListOf<SimpleExpression>()) { uniqueTermFactor ->
-                if (powerMaps.all { powerMap -> powerMap.values.any { it.contains(uniqueTermFactor) } }) { // Is GCF factor
+            .accumulate(mutableListOf<SimpleExpression>()) { uniqueTermFactor ->
+                if (powerMaps.all { powerMap ->
+                        powerMap.values.any {
+                            it.contains(uniqueTermFactor)
+                        }
+                    }) { // Is GCF factor
                     val gcfPowers = powerMaps.map {
                         it.entries.find { (_, commonBases) -> commonBases.contains(uniqueTermFactor) }?.key ?: 0
                     }
@@ -280,7 +290,7 @@ private fun gcfFactor(simpleMembers: SimpleExpressionList, includeVarExpr: Boole
                         }
                         if (gcfPower != minPower) { // Factoring does not remove factor entirely
                             val residualPower = gcfPower - minPower
-                            powerMap[residualPower] = powerMap[residualPower] +! uniqueTermFactor
+                            powerMap[residualPower] = powerMap[residualPower] + !uniqueTermFactor
                         } else if (powerMap.isEmpty()) {
                             powerMap[1] = ONLY_ONE
                         }
@@ -300,14 +310,14 @@ private fun gcfFactor(simpleMembers: SimpleExpressionList, includeVarExpr: Boole
             val numer = gcfNumer.second[index]
             val denom = gcfDenom.second[index]
             if (numer isNotValue BigDecimal.ONE) {
-                powerMap[1] = powerMap[1] +! Value(numer)
+                powerMap[1] = powerMap[1] + !Value(numer)
             }
             if (denom isNotValue BigDecimal.ONE) {
-                powerMap[-1] = powerMap[-1] +! Value(denom)
+                powerMap[-1] = powerMap[-1] + !Value(denom)
             }
         }
         val inside = powerMaps.toExpression()
-        val gcf = Fraction(gcfNumer.first ,gcfDenom.first).toExpression() simpleTimes gcfVarExpr
+        val gcf = Fraction(gcfNumer.first, gcfDenom.first).toExpression() simpleTimes gcfVarExpr
         gcf to inside
     } else {
         Expression.ONE to SimpleSum(simpleMembers)

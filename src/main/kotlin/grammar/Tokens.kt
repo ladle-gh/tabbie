@@ -143,6 +143,17 @@ internal class ContextFreeToken(
     override fun text() = getSingleAs<Text,TextToken>()
     override fun switch() = getSingleAs<Switch,SwitchToken>()
 
+    fun <M> walk(listeners: Map<String, Token.(M) -> Any?>, mutableState: M) {
+        children.forEach { it.walk(listeners, mutableState) } // Visit every node in tree
+        payload = listeners[id]?.let {
+             it(this, mutableState)
+        } ?: when (origin) {
+            is Sequence, is Multiple, is Star -> children.map { it.payload }
+            is Junction, is Option -> children[0].payload
+            else -> null    // Useful information for literals is found in .substring, not .payload
+        }
+    }
+
     private inline fun <reified S : Symbol, reified T : Token> getAs(index: Int): T {
         return try {
             children[index].origin as S

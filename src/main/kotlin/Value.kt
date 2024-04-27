@@ -7,8 +7,8 @@ import java.math.BigDecimal
  * @see MutableValue
  */
 open class Value(open val value: BigDecimal) : PureExpression(), CanBeNegative {
-    override fun substitute(vars: VariableTable) = this
-    override fun isolateCoeff() = value to Expression.ONE
+    override fun substitute(vars: Map<Char, SimpleExpression>) = this
+    override fun partitionCoeff() = value to Expression.ONE
 
     override fun isNegative() = value < BigDecimal.ZERO
     override fun removeNegative() = Value(-value)

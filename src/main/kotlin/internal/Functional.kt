@@ -8,31 +8,20 @@ import kotlin.contracts.contract
 
 // COLLECTIONS
 
+// TODO move all helper functions to one file
+
 /**
  * Implementation of [Iterable.fold] that returns the same object for each iteration. Instead of returning a new object
  * each time, the same object is reused and modified.
  * @param initial the object to be modified
  * @param modifier the operation to be applied to [initial] using each element
  */
-inline fun <T,U> Iterable<T>.mutableFold(initial: U, modifier: U.(T) -> Unit): U {
+inline fun <T,R> Iterable<T>.accumulate(initial: R, modifier: R.(T) -> Unit): R {
     fold(initial) { _, it ->
         modifier(initial, it)
         initial
     }
     return initial
-}
-
-inline fun <E> Iterable<E>.isolate(predicate: (E) -> Boolean): Pair<List<E>, List<E>> {
-    val isolated = mutableListOf<E>()
-    val remaining = mutableListOf<E>()
-    for (member in this) {
-        if (predicate(member)) {
-            isolated.add(member)
-        } else {
-            remaining.add(member)
-        }
-    }
-    return isolated to remaining
 }
 
 fun <E> Iterable<E>.isolateIndexIn(indexes: Iterable<Int>): Pair<List<E>, List<E>> {
@@ -44,14 +33,9 @@ fun <E> Iterable<E>.isolateIndexIn(indexes: Iterable<Int>): Pair<List<E>, List<E
     return listOf<E>() to this.toList()
 }
 
-inline fun <T : U, U> T.letIf(condition: Boolean, block: (T) -> U): U {
-    return if (condition) block(this) else this
-}
-
 // PAIR
 
-inline fun <A,B,T> Pair<A,B>.withBoth(withBoth: (A, B) -> T) = withBoth(first, second)
-
+// TODO phase out
 @OptIn(ExperimentalContracts::class)
 inline fun <A,B> Pair<A,B>.withFirst(withFirst: (A) -> Unit): Pair<A,B> {
     contract {
@@ -60,6 +44,7 @@ inline fun <A,B> Pair<A,B>.withFirst(withFirst: (A) -> Unit): Pair<A,B> {
     return this.also { withFirst(first) }
 }
 
+// TODO phase out
 @OptIn(ExperimentalContracts::class)
 inline fun <A,B> Pair<A,B>.withSecond(withSecond: (B) -> Unit) {
     contract {
@@ -67,7 +52,6 @@ inline fun <A,B> Pair<A,B>.withSecond(withSecond: (B) -> Unit) {
     }
     withSecond(second)
 }
-
 
 // TRIPLE
 

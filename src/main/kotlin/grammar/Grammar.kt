@@ -1,34 +1,57 @@
 package grammar
 
-import internal.withFirst
+fun <T,M> grammar(formalGrammar: String, builder: Grammar<T,M>.BuilderContext.() -> Unit): Grammar<T,M> {
+    val result = Grammar<T,M>()
+    if (formalGrammar == "__meta__") {
+        result.defineUsing(
+            "symbol" to MetaGrammar.symbol,
+            "escape" to MetaGrammar.escape,
+            "char" to MetaGrammar.char,
+            "switch" to MetaGrammar.switch,
+            "character" to MetaGrammar.character,
+            "text" to MetaGrammar.text,
+            "rule" to MetaGrammar.rule,
+            "sequence" to MetaGrammar.sequence,
+            "junction" to MetaGrammar.junction,
+            "multiple" to MetaGrammar.multiple,
+            "optional" to MetaGrammar.option,
+            "any" to MetaGrammar.star,
+            "start" to MetaGrammar.start,
+            "skip" to MetaGrammar.skip
+        )
+    } else {
+        result.defineUsing(formalGrammar)
+    }
+    return result
+}
 
 class Grammar<R, M> {
-    private val rules = mutableMapOf<String, Symbol>()
     private val listeners = mutableMapOf<String, Token.(M) -> Any?>()
-    private val defaultSymbols = mutableListOf<String>()
-    private lateinit var startID: String
-    private lateinit var skipID: String
+    private var rules: Map<String,Symbol> by AssignOnce()
+    private var startID: String by AssignOnce()
+    private var skipID: String by AssignOnce()
 
     fun parse(input: String, mutableState: M): R {
-        TODO()
+        // Root token can be seen as base of parse tree
+        val rootToken = rules.getValue(startID).match(CharStream(input), rules.getValue(skipID), mutableListOf())
+        rootToken.walk(listeners, mutableState)
+        return rootToken.payload()
+    }
+
+    internal fun defineUsing(formalGrammar: String) {
+        rules = META.parse(formalGrammar, MetaGrammarState())
+    }
+
+    internal fun defineUsing(vararg rule: Pair<String, Symbol>) {
+        rules = rule.toMap()
     }
 
     inner class BuilderContext {
-        internal fun definition(vararg rule: Pair<String, Symbol>) {
-            rules.putAll(rule)
-        }
-
         fun String.start() {
-            if (::startID.isInitialized) {
-                throw RedefinitionException("Start symbol already defined")
-            }
             startID = this
         }
 
         fun String.skip() {
-            if (::skipID.isInitialized) {
-                throw RedefinitionException("Skip symbol already defined")
-            }
             skipID = this
         }
 
@@ -37,12 +60,13 @@ class Grammar<R, M> {
                 throw IllegalCallerException("Rule '$this' is undefined")
             }
             if (this in listeners) {
-                throw RedefinitionException("Listener already defined")
+                throw IllegalCallerException("Listener for rule '$this' is already defined")
             }
             listeners[this] = listener
             return this
         }
 
+        // TODO add fail-fast check for proper Symbol in rules (.values)
         inline fun <T> String.sequence(crossinline listener: SequenceToken.(M) -> T) = invoke { listener(thisAs("SequenceToken"), it) }
         inline fun <T> String.junction(crossinline listener: JunctionToken.(M) -> T) = invoke { listener(thisAs("JunctionToken"), it) }
         inline fun <T> String.multiple(crossinline listener: MultipleToken.(M) -> T) = invoke { listener(thisAs("MultipleToken"), it) }
@@ -56,227 +80,150 @@ class Grammar<R, M> {
             throw IllegalArgumentException("$message (in '$substring')")
         }
     }
-}
 
-internal class MetaGrammarState {
-    val implicitNamedSymbols = mutableListOf<ImplicitSymbol>()  // .id == <id>
-    val rules = mutableMapOf<String, Symbol>()
-}
-
-internal val metaGrammar = grammar<Map<String,Symbol>,MetaGrammarState>("__meta__") {
-    definition(
-        "symbol" to MetaGrammar.symbol,
-        "escape" to MetaGrammar.escape,
-        "char" to MetaGrammar.char,
-        "switch" to MetaGrammar.switch,
-        "character" to MetaGrammar.character,
-        "text" to MetaGrammar.text,
-        "rule" to MetaGrammar.rule,
-        "sequence" to MetaGrammar.sequence,
-        "junction" to MetaGrammar.junction,
-        "multiple" to MetaGrammar.multiple,
-        "optional" to MetaGrammar.option,
-        "any" to MetaGrammar.star,
-        "start" to MetaGrammar.start,
-        "skip" to MetaGrammar.skip
-    )
-
-    "escape".sequence {
-        when (substring[1]) {
-            'u' -> substring.substring(2..5).toInt(8).toChar()
-            't' -> '\t'
-            'n' -> '\n'
-            'r' -> '\r'
-            else -> substring[1]    // ', -, \
+    internal companion object {
+        class MetaGrammarState {
+            val implicitNamedSymbols = mutableListOf<ImplicitSymbol>()
+            val rules = mutableMapOf<String, Symbol>()
         }
-    }
 
-    "char".junction {
-        if (match.id == "escape") match.payload() else substring.single()
-    }
-
-    "switch".sequence {
-        if (substring.length == 3) {    // .substring == "[-]"
-            AnyCharacter()
-        } else {
-            val lowerBounds = MutableIntVector()
-            val upperBounds = MutableIntVector()
-
-            junctionAt(1).sequence {    // -> <switch body>
-                optionAt(1).ifPresent { // -> <up-to>
-                    lowerBounds.push(Char.MIN_VALUE)
-                    upperBounds.push(sequence()[1].payload<Char>())
+        val META = grammar<Map<String,Symbol>,MetaGrammarState>("__meta__") {
+            "escape".sequence {
+                when (substring[1]) {
+                    'u' -> substring.substring(2..5).toInt(8).toChar()
+                    't' -> '\t'
+                    'n' -> '\n'
+                    'r' -> '\r'
+                    else -> substring[1]    // ', -, \
                 }
-                starAt(2).ifPresent { // -> <single character/range>
-                    for (j in junctions()) {
-                        val payload: Any? = j.match.payload()
-                        if (payload is Char) {
-                            lowerBounds.push(payload)
-                            upperBounds.push(payload)
-                        } else {
-                            j.sequence {    // -> <range>
-                                lowerBounds.push(this[0].payload<Char>())
-                                upperBounds.push(this[2].payload<Char>())
+            }
+
+            "char".junction {
+                if (match.id == "escape") match.payload() else substring.single()
+            }
+
+            "switch".sequence {
+                if (substring.length == 3) {    // .substring == "[-]"
+                    AnyCharacter()
+                } else {
+                    val lowerBounds = MutableIntVector()
+                    val upperBounds = MutableIntVector()
+
+                    junctionAt(1).sequence {    // -> <switch body>
+                        optionAt(1).ifPresent { // -> <up-to>
+                            lowerBounds.push(Char.MIN_VALUE)
+                            upperBounds.push(sequence()[1].payload<Char>())
+                        }
+                        starAt(2).ifPresent { // -> <single character/range>
+                            for (j in junctions()) {
+                                val payload: Any? = j.match.payload()
+                                if (payload is Char) {
+                                    lowerBounds.push(payload)
+                                    upperBounds.push(payload)
+                                } else {
+                                    j.sequence {    // -> <range>
+                                        lowerBounds.push(this[0].payload<Char>())
+                                        upperBounds.push(this[2].payload<Char>())
+                                    }
+                                }
+                            }
+                        }
+                        optionAt(3).ifPresent { // -> <at-least>
+                            lowerBounds.push(sequence()[0].payload<Char>())
+                            upperBounds.push(Char.MAX_VALUE)
+                        }
+                    }
+                    lowerBounds to upperBounds
+                }
+            }
+
+            "character".sequence {
+                Character(this[1].payload())
+            }
+
+            "text".sequence {
+                Text(this[1].substring)
+            }
+
+            "rule".sequence { mutableState ->
+                val id = sequenceAt(0).substring
+                val symbol = junctionAt(2) {    // -> symbol
+                    if (ordinal() == 5) {   // -> Sequence.ID
+                        raise("Delegation to another named symbol is forbidden")
+                    }
+                    val rhs = match.payload<Symbol>()
+                    if (rhs is ImplicitSymbol) {    // Delegation to literal
+                        // ...rhs can never be a named symbol
+                        ImplicitSymbol(id).apply { reference = rhs }
+                    } else {
+                        rhs.apply { this.id = id }
+                    }
+                }
+
+                mutableState.implicitNamedSymbols
+                    .indexOfFirst { it.id == id }
+                    .takeIf { it != -1 }
+                    ?.let {
+                        val reference = if (symbol is ImplicitSymbol) symbol.reference else symbol
+                        mutableState.implicitNamedSymbols[it].reference = reference
+                        mutableState.implicitNamedSymbols.removeAt(it)
+                    }
+                id to symbol
+            }
+
+            "sequence".multiple {
+                val symbols = ArrayList<Symbol>(matches.size)
+                matches.forEach { symbols.add(it.payload()) }
+                Sequence(members = symbols)
+            }
+
+            "junction".sequence {
+                val symbols = mutableListOf<Symbol>(this[0].payload())
+                multipleAt(1) {
+                    sequences().forEach { symbols.add(it[1].payload()) }
+                }
+                Junction(members = symbols)
+            }
+
+            "multiple".sequence {
+                Multiple(this[0].payload())
+            }
+
+            "option".sequence {
+                Option(this[0].payload())
+            }
+
+            "star".sequence {
+                Star(this[0].payload())
+            }
+
+            "start".multiple { mutableState ->
+                if (mutableState.implicitNamedSymbols.any()) {
+                    raise("No definitions found for implicit symbols: ${mutableState.implicitNamedSymbols}")
+                }
+                mutableState.rules
+            }.start()
+
+            "skip".skip()
+
+            "symbol".junction { mutableState ->
+                when (ordinal()) {
+                    0 -> {  // :: (<symbol>)
+                        sequence {
+                            this[1].payload()
+                        }
+                    }
+                    5 -> {  // :: <id>
+                        val id = match.substring
+                        mutableState.rules.getOrElse(id) {
+                            if (mutableState.implicitNamedSymbols.none { implicit -> implicit.id == id }) {
+                                mutableState.implicitNamedSymbols += ImplicitSymbol(id)
                             }
                         }
                     }
-                }
-                optionAt(3).ifPresent { // -> <at-least>
-                    lowerBounds.push(sequence()[0].payload<Char>())
-                    upperBounds.push(Char.MAX_VALUE)
+                    else -> match.payload()
                 }
             }
-            lowerBounds to upperBounds
-        }
-    }
-
-    "character".sequence {
-        Character(this[1].payload())
-    }
-
-    "text".sequence {
-        Text(this[1].substring)
-    }
-
-    "rule".sequence {
-        val id = sequenceAt(0).substring
-        val symbol = junctionAt(2) {    // -> symbol
-            if (ordinal() == 5) {   // -> Sequence.ID
-                raise("Delegation to another named symbol is forbidden")
-            }
-            val rhs = match.payload<Symbol>()
-            if (rhs is ImplicitSymbol) {    // Delegation to literal
-                // ...rhs can never be a named symbol
-                ImplicitSymbol(id).apply { reference = rhs }
-            } else {
-                rhs.apply { this.id = id }
-            }
-        }
-
-        it.implicitNamedSymbols
-            .partition { implicit -> implicit.id == id }
-            .withFirst {  }
-        id to symbol
-    }
-
-    "sequence".multiple {
-        val symbols = ArrayList<Symbol>(matches.size)
-        matches.forEach { symbols.add(it.payload()) }
-        Sequence(members = symbols)
-    }
-
-    "junction".sequence {
-        val symbols = mutableListOf<Symbol>(this[0].payload())
-        multipleAt(1) {
-            sequences().forEach { symbols.add(it[1].payload()) }
-        }
-        Junction(members = symbols)
-    }
-
-    "multiple".sequence {
-        Multiple(this[0].payload())
-    }
-
-    "option".sequence {
-        Option(this[0].payload())
-    }
-
-    "star".sequence {
-        Star(this[0].payload())
-    }
-
-    "start".multiple {
-        it.rules.forEach { (id, symbol) -> symbol.id = id }
-    }.start()
-
-    "skip".skip()
-
-    "symbol".junction {
-        when (ordinal()) {
-            0 -> {  // :: (<symbol>)
-                sequence {
-                    this[1].payload()
-                }
-            }
-            5 -> {  // :: <id>
-                val id = match.substring
-                it.rules.getOrElse(id) {
-                    ImplicitSymbol(id).also { implicit -> it.implicitNamedSymbols += implicit }
-                }
-            }
-            else -> match.payload()
         }
     }
 }
-
-fun <T,M> grammar(definition: String, builder: Grammar<T,M>.BuilderContext.() -> Unit): Grammar<T,M> {
-    val result = Grammar<T,M>()
-    MetaGrammar.start.match(CharStream(definition), MetaGrammar.skip)
-    return result
-}
-/*
-Sequence
-/// Convenience
-    // sequenceAt (flattened)
-    junctionAt
-    optionalAt
-    anyAt   // (handled internaly as multiple(optional)
-    characterAt
-    textAt
-    switchAt
-
-/// Fail-fast
-    junctions
-    // sequences
-    optionals
-    anys
-    characters  // (.string)
-    text
-    switches
-
-    matches
-Character
-    value
-String
-    length
-Option
-/// Fail-fast
-    junction
-    ...
-
-    ifPresent
-    isPresent
-    isNotPresent
-
-    match   // can be EMPTY
-Multiple
-/// Fail-fast
-    junctions
-    ...
-
-    matches // (.size)
-Junction
-/// Fail-fast
-    junction
-    ...
-
-    ordinal
-
-    match
-Switch
-    ordinal
-
-    value
-
-Token
-/// Fail-fast
-    asSequence
-    asCharacter
-    asText
-    asSwitch
-    asOptional
-    asMultiple
-    asJunction
-
-    invoke (with)
- */

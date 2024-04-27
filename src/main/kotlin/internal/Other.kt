@@ -7,6 +7,7 @@ package internal
  */
 infix fun <T, U : T> T.and(that: U) = listOf(this, that)
 
+// TODO phase out
 /**
  * Contract for [Any.equals] that ensures:
  * - The other object is not null
