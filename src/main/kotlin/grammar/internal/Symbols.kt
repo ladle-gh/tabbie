@@ -8,14 +8,14 @@ import grammar.ContextFreeToken
  * Not needed for implicitly defined symbols or [Option]s.
  * Those starting in an underscore or digit are reserved for the compiler.
  * @see ContextFreeToken
- * @see Grammar
+ * @see grammar.Grammar
  */
 internal sealed class Symbol(var id: String = ID.next()) {
     /**
-     * Used for symbols marked with the "start" directive.
+     * Entry-point of parser.
      * @see MetaGrammar.start
      */
-    fun match(input: CharStream, skip: Symbol): ContextFreeToken {
+    fun startMatch(input: CharStream, skip: Symbol): ContextFreeToken {
         val recursions = mutableListOf<String>()
         skip.consume(input, recursions)
         return match(input, skip, recursions)
@@ -26,7 +26,11 @@ internal sealed class Symbol(var id: String = ID.next()) {
      */
     fun match(input: CharStream, skip: Symbol, recursions: MutableList<String>): ContextFreeToken {
         recursions.add(id)
-        return attemptMatch(input, skip, recursions).also { recursions.removeLast() }
+        return try {
+            attemptMatch(input, skip, recursions).also { recursions.removeLast() }
+        } catch (_: StreamTerminator) {
+            ContextFreeToken.NOTHING
+        }
     }
 
     /**
@@ -218,6 +222,7 @@ internal class Switch(
         }
     }
 }
+
 /**
  * Symbol created by definition of a string. May be implicitly defined.
  */
@@ -227,13 +232,9 @@ internal class Text(id: String = ID.next(), private val acceptable: String) : Sy
     constructor(acceptable: String) : this(ID.next(), acceptable)
 
     override fun attemptMatch(input: CharStream, skip: Symbol, recursions: MutableList<String>): ContextFreeToken {
-        val result = tokenOrNothing(input,acceptable.all { it == input.next() }, length = length)
+        val result = tokenOrNothing(input, acceptable.all { it == input.next() }, length = length)
         input.regressPosition(length - result.substring.length)
         return result
-    }
-
-    companion object {
-        val ARROW = Text("->")
     }
 }
 
@@ -255,6 +256,9 @@ internal class Character(id: String = ID.next(), private val acceptable: Char) :
     }
 }
 
+/**
+ * TODO document
+ */
 private inline fun <E, T> Iterable<E>.anyNot(not: T, transform: (E) -> T): T {
     for (member in this) {
         val result = transform(member)

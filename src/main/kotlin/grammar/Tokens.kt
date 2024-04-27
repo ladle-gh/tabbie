@@ -376,16 +376,6 @@ sealed interface SwitchToken : Token, CollapsibleToken {
  */
 sealed interface QualifiedSwitchToken : SwitchToken, QualifiedMultiMatchToken
 
-@Suppress("UNCHECKED_CAST")
-internal fun <T> Token.thisAs(tokenName: String): T {
-    val expect = tokenName.dropLast("Token".length)
-    val actual = (this as ContextFreeToken).origin::class.simpleName
-    if (actual == expect) {
-        return this as T
-    }
-    throw TypeCastException("Listener type ($expect) does not agree with type of symbol ($actual)")
-}
-
 internal class ContextFreeToken(
     var origin: Symbol,
     override val substring: String = "",

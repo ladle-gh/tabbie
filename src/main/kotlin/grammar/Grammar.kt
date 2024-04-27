@@ -1,12 +1,7 @@
+@file:Suppress("UNUSED")
 package grammar
 
-import grammar.internal.AssignOnce
-import grammar.internal.CharStream
-import grammar.internal.MetaGrammar
-import grammar.internal.Symbol
-
-
-// TODO write code for when end of stream is reached
+import grammar.internal.*
 
 /**
  * Provides the primary functionality of the API.
@@ -34,7 +29,7 @@ class Grammar<R,M> internal constructor() {
      */
     fun parse(input: String, mutableState: M): R {
         // Root token can be seen as base of parse tree
-        val rootToken = rules.getValue(startID).match(CharStream(input), rules.getValue(skipID), mutableListOf())
+        val rootToken = rules.getValue(startID).startMatch(CharStream(input), rules.getValue(skipID))
         rootToken.walk(listeners, mutableState)
         return rootToken.payload()
     }
@@ -69,7 +64,7 @@ class Grammar<R,M> internal constructor() {
          * Assigns the rule with this ID the given listener.
          * @return the rule ID
          */
-        operator fun <T> String.invoke(listener: Token.(M) -> T): String {
+        operator fun <P> String.invoke(listener: Token.(M) -> P): String {
             if (this !in rules) {
                 throw NoSuchElementException("Rule '$this' is undefined")
             }
@@ -80,30 +75,61 @@ class Grammar<R,M> internal constructor() {
             return this
         }
 
-        // TODO add fail-fast checks for proper Symbol in rules (.values)
-        // TODO document
-        fun <T> String.sequence(listener: SequenceToken.(M) -> T) = invoke { listener(thisAs("SequenceToken"), it) }
+        /**
+         * Assigns the rule with this ID the given listener.
+         * Asserts that the given rule is delegated to a sequence of tokens.
+         * @throws TokenMismatchException the assertion fails
+         */
+        fun <P> String.sequence(listener: SequenceToken.(M) -> P) = listenerOf<Sequence,_,_>(listener)
 
+        /**
+         * Assigns the rule with this ID the given listener.
+         * Asserts that the given rule is delegated to a rule defined using the '|' operator.
+         * @throws TokenMismatchException the assertion fails
+         */
+        fun <P> String.junction(listener: JunctionToken.(M) -> P) =  listenerOf<Junction,_,_>(listener)
 
-        fun <T> String.junction(listener: JunctionToken.(M) -> T) = invoke { listener(thisAs("JunctionToken"), it) }
+        /**
+         * Assigns the rule with this ID the given listener.
+         * Asserts that the given rule is delegated to a rule defined using the '' operator.
+         * @throws TokenMismatchException the assertion fails
+         */
+        fun <P> String.multiple(listener: MultipleToken.(M) -> P) = listenerOf<Multiple,_,_>(listener)
 
+        /**
+         * Assigns the rule with this ID the given listener.
+         * Asserts that the given rule is delegated to a rule defined using the '?' operator.
+         * @throws TokenMismatchException the assertion fails
+         */
+        fun <P> String.option( listener: OptionToken.(M) -> P) = listenerOf<Option,_,_>(listener)
 
-        fun <T> String.multiple(listener: MultipleToken.(M) -> T) = invoke { listener(thisAs("MultipleToken"), it) }
+        /**
+         * Assigns the rule with this ID the given listener.
+         * Asserts that the given rule is delegated to a rule defined using the '*' operator.
+         * @throws TokenMismatchException the assertion fails
+         */
+        fun <P> String.star(listener: StarToken.(M) -> P) = listenerOf<Star,_,_>(listener)
 
+        /**
+         * Assigns the rule with this ID the given listener.
+         * Asserts that the given rule is delegated to a character literal.
+         * @throws TokenMismatchException the assertion fails
+         */
+        fun <P> String.character(listener: CharacterToken.(M) -> P) = listenerOf<Character,_,_>(listener)
 
-        fun <T> String.option( listener: OptionToken.(M) -> T) = invoke { listener(thisAs("OptionToken"), it) }
+        /**
+         * Assigns the rule with this ID the given listener.
+         * Asserts that the given rule is delegated to a text literal.
+         * @throws TokenMismatchException the assertion fails
+         */
+        fun <P> String.text(listener: TextToken.(M) -> P) = listenerOf<Text,_,_>(listener)
 
-
-        fun <T> String.star(listener: StarToken.(M) -> T) = invoke { listener(thisAs("StarToken"), it) }
-
-
-        fun <T> String.character(listener: CharacterToken.(M) -> T) = invoke { listener(thisAs("CharacterToken"), it) }
-
-
-        fun <T> String.text(listener: TextToken.(M) -> T) = invoke { listener(thisAs("TextToken"), it) }
-
-
-        fun <T> String.switch(listener: SwitchToken.(M) -> T) = invoke { listener(thisAs("SwitchToken"), it) }
+        /**
+         * Assigns the rule with this ID the given listener.
+         * Asserts that the given rule is delegated to a switch literal.
+         * @throws TokenMismatchException the assertion fails
+         */
+        fun <P> String.switch(listener: SwitchToken.(M) -> P) = listenerOf<Switch,_,_>(listener)
 
         /**
          * Throws an exception containing the error message and the current substring.
@@ -111,6 +137,21 @@ class Grammar<R,M> internal constructor() {
          */
         fun Token.raise(message: String): Nothing {
             throw ParseException("$message (in '$substring')")
+        }
+
+        private inline fun <reified S : Symbol,reified T : Token,P> String.listenerOf(
+            crossinline listener: T.(M) -> P
+        ): String {
+            val id = invoke {
+                if ((this as ContextFreeToken).origin::class != S::class) {
+                    throw TypeCastException("Listener type does not agree with type of rule '$this'")
+                }
+                listener(this as T, it)
+            }
+            if (rules.getValue(id) !is S) {
+                throw TokenMismatchException("Type of rule '$id' described by listener does not agree with actual type")
+            }
+            return id
         }
     }
 }

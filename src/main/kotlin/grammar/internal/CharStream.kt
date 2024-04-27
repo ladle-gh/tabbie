@@ -28,7 +28,7 @@ internal class CharStream(private val source: String) {
     fun peek() = try {
         source[curPosition]
     } catch (e: IndexOutOfBoundsException) {
-        throw NoSuchElementException("End of stream reached", e)
+        throw StreamTerminator
     }
 
     fun advancePosition(places: Int) {
