@@ -1,16 +1,13 @@
 package grammar
 
-inline fun <T : PossiblyEmpty> T.ifPresent(block: T.() -> Unit) {
+/**
+ * Provides a scope with the receiver as
+ */
+inline fun <T : PossiblyEmptyToken> T.ifPresent(block: T.() -> Unit) {
     if (isPresent()) {
         block(this)
     }
 }
 
-interface PossiblyEmpty {
-    fun isPresent(): Boolean
-    fun isNotPresent(): Boolean
-}
 
-interface Numbered {
-    fun ordinal(): Int
-}
+

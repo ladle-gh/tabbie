@@ -1,4 +1,4 @@
-package grammar
+package grammar.internal
 
 import kotlin.NoSuchElementException
 

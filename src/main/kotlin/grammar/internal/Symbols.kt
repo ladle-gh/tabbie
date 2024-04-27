@@ -1,4 +1,6 @@
-package grammar
+package grammar.internal
+
+import grammar.ContextFreeToken
 
 /**
  * [Matches][attemptMatch] tokens in a [stream][CharStream].
@@ -83,9 +85,9 @@ internal sealed class Symbol(var id: String = ID.next()) {
  *
  * Default payload: List of payloads for each matched symbol
  */
-internal class Sequence(id: String = grammar.ID.next(), private val members: List<Symbol>) : Symbol(id) {
+internal class Sequence(id: String = grammar.internal.ID.next(), private val members: List<Symbol>) : Symbol(id) {
     constructor(id: String, vararg members: Symbol) : this(id, members.toList())
-    constructor(vararg members: Symbol) : this(grammar.ID.next(), members.toList())
+    constructor(vararg members: Symbol) : this(grammar.internal.ID.next(), members.toList())
 
     override fun attemptMatch(input: CharStream, skip: Symbol, recursions: MutableList<String>): ContextFreeToken {
         // assert(members.size > 0)
@@ -114,8 +116,6 @@ internal class Sequence(id: String = grammar.ID.next(), private val members: Lis
 
 /**
  * Symbol created by use of the '|' operator.
- *
- * Default payload: Payload of matched symbol
  */
 internal class Junction(id: String = ID.next(), private val members: List<Symbol>) : Symbol(id) {
     constructor(id: String, vararg members: Symbol) : this(id, members.toList())
@@ -134,9 +134,6 @@ internal class Junction(id: String = ID.next(), private val members: List<Symbol
 
 /**
  * Symbol created by use of the '+' operator.
- * Use of the '*' operator results in the creation of this symbol, with [inner] being an [Option].
- *
- * Default payload: List of payloads for each match
  */
 internal class Multiple(id: String = ID.next(), private val inner: Symbol) : Symbol(id) {
     constructor(inner: Symbol) : this(ID.next(), inner)
@@ -158,8 +155,6 @@ internal class Multiple(id: String = ID.next(), private val inner: Symbol) : Sym
 /**
  * Symbol created by use of the '?' operator.
  * Because of the possibility that nothing is captured, this symbol cannot be given an ID or listener.
- *
- * Default payload: If match exists: Payload of matched symbol; If not: null
  */
 internal class Option(private val inner: Symbol) : Symbol() {
     override fun attemptMatch(input: CharStream, skip: Symbol, recursions: MutableList<String>): ContextFreeToken {
@@ -175,8 +170,6 @@ internal class Option(private val inner: Symbol) : Symbol() {
 /**
  * Symbol created by use of the '*' operator.
  * Because of the possibility that nothing is captured, this symbol cannot be given an ID or listener.
- *
- * Default payload: If match exists: List of payloads of each match; If not: empty list
  */
 internal class Star(inner: Symbol) : Symbol() {
     private val equivalent = Option(Multiple(inner))
@@ -193,8 +186,6 @@ internal class Star(inner: Symbol) : Symbol() {
  * For at-least ranges (e.g. [a-]), [upperBounds] will store [Char.MAX_VALUE].
  * For single characters (e.g. [ab-c]), the lower and upper bounds will be the same.
  * May be implicitly defined.
- *
- * Default payload: The matched character
  */
 internal class Switch(
     id: String = ID.next(),
@@ -229,8 +220,6 @@ internal class Switch(
 }
 /**
  * Symbol created by definition of a string. May be implicitly defined.
- *
- * Default payload: The matched string
  */
 internal class Text(id: String = ID.next(), private val acceptable: String) : Symbol(id) {
     private val length = acceptable.length
@@ -250,8 +239,6 @@ internal class Text(id: String = ID.next(), private val acceptable: String) : Sy
 
 /**
  * Symbol created by defintition of a string of length 1. May be implicitly defined.
- *
- * Default payload: The matched character
  */
 internal class Character(id: String = ID.next(), private val acceptable: Char) : Symbol(id) {
     constructor(acceptable: Char) : this(ID.next(), acceptable)
@@ -286,8 +273,6 @@ private object ID {
 
 /**
  * Used only in [Token] to describe the origin of NOTHING and EMPTY.
- *
- * Default payload: null
  */
 internal class OriginMarker private constructor(id: String) : Symbol(id) {
     override fun attemptMatch(input: CharStream, skip: Symbol, recursions: MutableList<String>): Nothing {
@@ -301,9 +286,7 @@ internal class OriginMarker private constructor(id: String) : Symbol(id) {
 }
 
 /**
- * Optimization of "[-]". May be implicitly defined.
- *
- * Default payload: null
+ * Optimization of "\[-]". May be implicitly defined.
  */
 internal class AnyCharacter(id: String = ID.next()) : Symbol(id) {
     override fun attemptMatch(input: CharStream, skip: Symbol, recursions: MutableList<String>): ContextFreeToken {

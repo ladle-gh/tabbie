@@ -1,4 +1,4 @@
-package grammar
+package grammar.internal
 
 internal class CharStream(private val source: String) {
     private var curPosition = 0
