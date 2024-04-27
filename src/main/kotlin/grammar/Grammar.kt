@@ -9,7 +9,8 @@ import grammar.internal.Symbol
 // TODO write code for when end of stream is reached
 
 /**
- * @retun a context-free grammar with the given definition and specifications
+ * Provides the primary functionality of the API.
+ * @return a context-free grammar with the given definition and specifications
  */
 fun <T,M> grammar(formalGrammar: String, builder: Grammar<T,M>.BuilderContext.() -> Unit): Grammar<T,M> {
     return Grammar<T,M>().apply {
@@ -19,7 +20,7 @@ fun <T,M> grammar(formalGrammar: String, builder: Grammar<T,M>.BuilderContext.()
 }
 
 /**
- * A context-free grammar used to parse complex expressions.
+ * A context-free grammar used to parse complex expressions in a string.
  */
 class Grammar<R,M> internal constructor() {
     private val listeners = mutableMapOf<String, Token.(M) -> Any?>()
