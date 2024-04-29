@@ -1,5 +1,6 @@
 package grammar.internal
 
+import org.jetbrains.annotations.Contract
 import kotlin.NoSuchElementException
 
 internal fun vectorOf(c: Char): IntVector = SingletonIntVector(c.code)
@@ -13,20 +14,22 @@ internal fun vectorOf(vararg c: Char): IntVector {
 /**
  * Optimization of [List] for integers.
  */
-internal sealed interface IntVector {
-    val size: Int
-    val indices: IntRange
+internal sealed class IntVector {
+    abstract val size: Int
+    abstract val indices: IntRange
 
-    fun sum(): Int
-    fun isEmpty(): Boolean
-    fun isNotEmpty(): Boolean
-    operator fun get(index: Int): Int
+    abstract fun sum(): Int
+    abstract fun isEmpty(): Boolean
+    abstract fun isNotEmpty(): Boolean
+    abstract operator fun get(index: Int): Int
+
+    final override fun toString() = indices.map { this[it] }.joinToString(prefix = "[", postfix = "]")
 }
 
 internal open class ArrayIntVector : IntVector {
     final override var size: Int
         protected set
-    final override val indices get() = data.indices
+    final override val indices get() = data.indices.let { it.first..<it.last.coerceAtMost(size) }
 
     protected var data: IntArray
 
@@ -68,21 +71,24 @@ internal open class ArrayIntVector : IntVector {
     }
 }
 
-internal class MutableIntVector(size: Int = DEFAULT_SIZE) : ArrayIntVector(size) {
-    fun push(c: Char) = push(c.code)
+internal class MutableIntVector(initialSize: Int = DEFAULT_SIZE) : ArrayIntVector(initialSize) {
+    operator fun plusAssign(c: Char) = plusAssign(c.code)
 
-    fun push(n: Int) {
+    operator fun plusAssign(n: Int) {
         if (size == data.size) {
-            data = IntArray(size * 2).apply { indices.forEach { this[it] = data[it] } }
+            val new = IntArray(size * 2)
+            System.arraycopy(data, 0, new, 0, size)
+            data = new
         }
         data[size] = n
+        ++size
     }
 
-    fun pop(): Int {
+    fun removeLast(): Int {
         try {
             return data[size - 1].also { --size }
         } catch (e: IndexOutOfBoundsException) {
-            throw NoSuchElementException("Cannot pop value from empty stack", e)
+            throw NoSuchElementException("Cannot remove integer from empty vector", e)
         }
     }
 
@@ -91,9 +97,9 @@ internal class MutableIntVector(size: Int = DEFAULT_SIZE) : ArrayIntVector(size)
     }
 }
 
-private class SingletonIntVector(val value: Int) : IntVector {
-    override val indices = INDICES
-    override val size = 1
+private class SingletonIntVector(val value: Int) : IntVector() {
+    override val indices get() = INDICES
+    override val size get() = 1
 
     override fun sum() = value
     override fun isEmpty() = false
@@ -118,6 +124,6 @@ private class SingletonIntVector(val value: Int) : IntVector {
     }
 
     private companion object {
-        val INDICES = IntRange(0, 0)
+        val INDICES = 0..<1
     }
 }

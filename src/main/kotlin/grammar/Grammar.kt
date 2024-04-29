@@ -1,7 +1,8 @@
-@file:Suppress("UNUSED")
+@file:Suppress("UNUSED", "MemberVisibilityCanBePrivate")
 package grammar
 
 import grammar.internal.*
+import java.io.*
 
 // TODO test
 // TODO move to seperate repository
@@ -10,37 +11,99 @@ import grammar.internal.*
  * Provides the primary functionality of the API.
  * @return a context-free grammar with the given definition and specifications
  */
-fun <T,M> grammar(formalGrammar: String, builder: Grammar<T,M>.BuilderContext.() -> Unit): Grammar<T,M> {
-    return Grammar<T,M>().apply {
-        rules = MetaGrammar.GRAMMAR.parse(formalGrammar, MetaGrammar.MutableState())
+@Suppress("UNCHECKED_CAST")
+fun <R,M : Grammar.MutableState> grammar(
+    formalGrammar: String,
+    cachePath: String = "",
+    builder: Grammar<R,M>.BuilderContext.() -> Unit
+): Grammar<R,M> {
+    val needsCache = if (cachePath.isNotEmpty()) {
+        val file = File(cachePath)
+        if (file.exists()) {
+            FileInputStream(file).use { fileStream ->
+                ObjectInputStream(fileStream).use {
+                    try {
+                        return it.readObject() as Grammar<R, M>
+                    } catch (_: TypeCastException) {}
+                }
+            }
+        }
+        true
+    } else {
+        false
+    }
+    return Grammar<R,M>().apply {
+        rules = MetaGrammar.grammar.parse(formalGrammar, MetaGrammar.MutableState())
         builder(BuilderContext())
+        if (needsCache) {
+            FileOutputStream(cachePath).use { fileStream ->
+                ObjectOutputStream(fileStream).use {
+                    it.writeUnshared(this)
+                    it.flush()
+                }
+            }
+        }
     }
 }
 
 /**
  * A context-free grammar used to parse complex expressions in a string.
+ * @param R the type of the
  */
-class Grammar<R,M> internal constructor() {
+class Grammar<R,M : Grammar.MutableState> internal constructor() : Serializable {
     private val listeners = mutableMapOf<String, Token.(M) -> Any?>()
     internal var rules: Map<String, Symbol> by AssignOnce()
     private var startID: String by AssignOnce()
     private var skipID: String by AssignOnce()
 
     /**
-     * Parses the input using the given mutable state.
-     * @return the payload of the principle token
+     * Parses the input while modifying the given mutable state.
+     * @return the payload of the principle token (the base of the parse tree)
+     * @throws ParseException there is nothing to parse or there is an unknown symbol
+     * @see parseOrNull
      */
-    fun parse(input: String, mutableState: M): R {
-        // Root token can be seen as base of parse tree
-        val rootToken = rules.getValue(startID).startMatch(CharStream(input), rules.getValue(skipID))
-        rootToken.walk(listeners, mutableState)
-        return rootToken.payload()
+    fun parse(input: String, mutableState: M) = parse(StringCharStream(input), mutableState)
+
+    /**
+     * Parses the input while modifying the given mutable state.
+     * @return the payload of the principle token (the base of the parse tree),
+     * or null if there is nothing to parse or there is an unknown symbol
+     * @see parse
+     */
+    fun parseOrNull(input: String, mutableState: M) = parseOrNull(StringCharStream(input), mutableState)
+
+    /**
+     * Parses the input present within the given text file while modifying the given mutable state.
+     * @return the payload of the principle token (the base of the parse tree)
+     * @throws ParseException there is nothing to parse or there is an unknown symbol
+     * @see parseFileOrNull
+     */
+    fun parseFile(inputPath: String, mutableState: M) = parse(FileCharStream(inputPath), mutableState)
+
+    /**
+     * Parses the input present within the given text file while modifying the given mutable state.
+     * @return the payload of the principle token (the base of the parse tree),
+     * or null if there is nothing to parse or there is an unknown symbol
+     * @see parseFile
+     */
+    fun parseFileOrNull(inputPath: String, mutableState: M) = parseOrNull(FileCharStream(inputPath), mutableState)
+
+
+    /**
+     * Contains mutable properties which are manipulated by each listener invokation.
+     * Useful for collecting information regardless of location in the parse tree.
+     * Grammars that do not need such information should create an instance of the base class.
+     */
+    open class MutableState {
+        internal var position = -1  // TODO implement functionality
     }
 
     /**
      * The scope wherein the start rule, skip rule, and listeners of a grammar are defined.
      */
     inner class BuilderContext internal constructor() {
+        private val listenerDefinition = ListenerDefinition<Any?>()
+
         /**
          * Declares the rule with this ID to be the principle rule.
          */
@@ -144,17 +207,51 @@ class Grammar<R,M> internal constructor() {
 
         private inline fun <reified S : Symbol,reified T : Token,P> String.listenerOf(
             crossinline listener: T.(M) -> P
-        ): String {
+        ): ListenerDefinition<P> {
             val id = invoke {
-                if ((this as ContextFreeToken).origin::class != S::class) {
-                    throw TypeCastException("Listener type does not agree with type of rule '$this'")
+                if ((this as ContextFreeToken).origin.reference()::class != S::class) {
+                    throw TokenMismatchException("Listener type does not agree with type of rule '$this'")
                 }
                 listener(this as T, it)
             }
-            if (rules.getValue(id) !is S) {
-                throw TokenMismatchException("Type of rule '$id' described by listener does not agree with actual type")
+            val symbol = rules.getValue(id).reference()
+            if (symbol !is S) {
+                throw TokenMismatchException("Type of rule '$id' described by listener (${S::class.simpleName}) " +
+                        "does not agree with actual type (${symbol::class.simpleName})")
             }
-            return id
+            return ListenerDefinition()
         }
+    }
+
+    private fun parse(inputStream: CharStream, mutableState: M): R {
+        inputStream.use {
+            val skip = rules.getValue(skipID)
+            val recursions = mutableListOf<String>()
+            skip.consume(inputStream, recursions)
+            val rootToken = rules.getValue(startID).match(inputStream, skip, recursions) // Base of parse tree
+            if (rootToken === ContextFreeToken.NOTHING) {
+                throw ParseException("Start symbol not found in input", 0)
+            }
+            skip.consume(inputStream, recursions)
+            if (inputStream.hasNext()) {
+                throw ParseException("Unknown symbol in input", inputStream.position)
+            }
+            rootToken.walk(listeners, mutableState)
+            return rootToken.payload()
+        }
+    }
+
+    private fun parseOrNull(input: CharStream, mutableState: M): R? {
+        return try {
+            parse(input, mutableState)
+        } catch (e: ParseException) {
+            null
+        }
+    }
+
+    class ListenerDefinition<P> internal constructor()
+
+    private companion object {
+        @Serial val serialVersionUID = 1L
     }
 }

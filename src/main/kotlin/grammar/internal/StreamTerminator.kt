@@ -1,4 +1,5 @@
 package grammar.internal
 
-@Suppress("JavaIoSerializableObjectMustHaveReadResolve")
-internal object StreamTerminator : Throwable()
+internal object StreamTerminator : Throwable() {
+    private fun readResolve(): Any = StreamTerminator
+}

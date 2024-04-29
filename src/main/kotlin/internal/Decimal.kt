@@ -30,6 +30,8 @@ class BigDecimalReference(var value: BigDecimal = BigDecimal.ZERO) : AbstractMut
     override fun add(element: BigDecimal) = true.also { value += element }
 }
 
+// TODO get rid of this god-awful hack, replace with a decent function, Any?.()
+
 operator fun BigDecimalReference?.plus(other: AddOrModify<BigDecimal>): BigDecimalReference {
     return this?.apply { value += other.value } ?: BigDecimalReference(other.value)
 }

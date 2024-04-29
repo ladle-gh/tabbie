@@ -1,6 +1,7 @@
 package grammar.internal
 
 import grammar.ContextFreeToken
+import grammar.internal.MetaGrammar.characterEscapes
 
 /**
  * [Matches][attemptMatch] tokens in a [stream][CharStream].
@@ -10,16 +11,11 @@ import grammar.ContextFreeToken
  * @see ContextFreeToken
  * @see grammar.Grammar
  */
-internal sealed class Symbol(var id: String = ID.next()) {
+internal sealed class Symbol(var id: String) {
     /**
-     * Entry-point of parser.
-     * @see MetaGrammar.start
+     * @return this, or [ImplicitSymbol.reference] if implicit
      */
-    fun startMatch(input: CharStream, skip: Symbol): ContextFreeToken {
-        val recursions = mutableListOf<String>()
-        skip.consume(input, recursions)
-        return match(input, skip, recursions)
-    }
+    open fun reference() = this
 
     /**
      * [attemptMatch] with protection from infinite recursion.
@@ -27,20 +23,39 @@ internal sealed class Symbol(var id: String = ID.next()) {
     fun match(input: CharStream, skip: Symbol, recursions: MutableList<String>): ContextFreeToken {
         recursions.add(id)
         return try {
-            attemptMatch(input, skip, recursions).also { recursions.removeLast() }
+            attemptMatch(input, skip, recursions)
         } catch (_: StreamTerminator) {
             ContextFreeToken.NOTHING
+        } finally {
+            recursions.removeLast()
         }
     }
 
     /**
      * Consumes the next characters in stream which match this symbol.
-     * Used for symbols marked with the "skip" directive.
-     * @see MetaGrammar.skip
+     * Used for skip symbols.
      */
     fun consume(input: CharStream, recursions: MutableList<String>) {
-        match(input, ZeroLengthSymbol, recursions)
+        match(input, ContextFreeToken.EMPTY.origin, recursions)
     }
+
+    /**
+     * @return true if debug string needs parentheses to prevent ambiguity
+     */
+    open fun needsParentheses() = false
+
+    /**
+     * @return debug string or ID without ambiguity
+     */
+    fun toIntermediateString(): String {
+        return if (needsParentheses()) {
+            "(${debugStringOrID()})"
+        } else {
+            debugStringOrID()
+        }
+    }
+
+    abstract fun toDebugString(): String
 
     /**
      * If the current in [input] contains an expression that agrees with the rules defined by this object, a token
@@ -82,6 +97,10 @@ internal sealed class Symbol(var id: String = ID.next()) {
     ): ContextFreeToken {
         return if (!predicate) ContextFreeToken.NOTHING else token(input, children, length, ordinal)
     }
+
+    final override fun toString() = debugStringOrID()
+
+    private fun debugStringOrID() = id.takeIf { it[0] == '$' }?.let { toDebugString() } ?: id
 }
 
 /**
@@ -89,41 +108,52 @@ internal sealed class Symbol(var id: String = ID.next()) {
  *
  * Default payload: List of payloads for each matched symbol
  */
-internal class Sequence(id: String = grammar.internal.ID.next(), private val members: List<Symbol>) : Symbol(id) {
+internal class Sequence(id: String = generateID("Sequence"), private val members: List<Symbol>) : Symbol(id) {
     constructor(id: String, vararg members: Symbol) : this(id, members.toList())
-    constructor(vararg members: Symbol) : this(grammar.internal.ID.next(), members.toList())
+    constructor(vararg members: Symbol) : this(generateID("Sequence"), members.toList())
+
+    init {
+        assert(members.isNotEmpty())
+    }
+
+    override fun needsParentheses() =  members.size > 1
 
     override fun attemptMatch(input: CharStream, skip: Symbol, recursions: MutableList<String>): ContextFreeToken {
-        // assert(members.size > 0)
         val children = mutableListOf<ContextFreeToken>()
         var subMatch: ContextFreeToken
 
+        input.savePosition()
         for (member in members) {
             subMatch = member.match(input, skip, recursions)
             if (subMatch === ContextFreeToken.NOTHING) {
-                input.regressPosition(children.sumOf { it.substring.length })
+                input.revertPosition()
                 return ContextFreeToken.NOTHING
             }
             children += subMatch
             skip.consume(input, recursions)
         }
+        input.removeSavedPosition()
         return token(input, children)
     }
 
     companion object {
-        val ID = Sequence("id",
+        val ID = Sequence("ID",
             Switch(vectorOf('a', 'A'), vectorOf('z', 'Z')),
             Star(Switch(vectorOf('a', 'A', '0', '_'), vectorOf('z', 'Z', '9', '_')))
         )
     }
+
+    override fun toDebugString() = members.joinToString(" ", transform = { it.toIntermediateString() })
 }
 
 /**
  * Symbol created by use of the '|' operator.
  */
-internal class Junction(id: String = ID.next(), private val members: List<Symbol>) : Symbol(id) {
+internal class Junction(id: String = generateID("Junction"), private val members: List<Symbol>) : Symbol(id) {
     constructor(id: String, vararg members: Symbol) : this(id, members.toList())
-    constructor(vararg members: Symbol) : this(ID.next(), members.toList())
+    constructor(vararg members: Symbol) : this(generateID("Junction"), members.toList())
+
+    override fun needsParentheses() = members.size > 1
 
     override fun attemptMatch(input: CharStream, skip: Symbol, recursions: MutableList<String>): ContextFreeToken {
         val subMatch = members
@@ -134,13 +164,15 @@ internal class Junction(id: String = ID.next(), private val members: List<Symbol
             ordinal = members.indexOfFirst { it.id == subMatch.origin.id }
         )
     }
+
+    override fun toDebugString() = members.joinToString(" | ", transform = { it.toIntermediateString() })
 }
 
 /**
  * Symbol created by use of the '+' operator.
  */
-internal class Multiple(id: String = ID.next(), private val inner: Symbol) : Symbol(id) {
-    constructor(inner: Symbol) : this(ID.next(), inner)
+internal class Multiple(id: String = generateID("Multiple"), val inner: Symbol) : Symbol(id) {
+    constructor(inner: Symbol) : this(generateID("Multiple"), inner)
 
     override fun attemptMatch(input: CharStream, skip: Symbol, recursions: MutableList<String>): ContextFreeToken {
         val children = mutableListOf<ContextFreeToken>()
@@ -154,13 +186,15 @@ internal class Multiple(id: String = ID.next(), private val inner: Symbol) : Sym
         }
         return tokenOrNothing(input, children.isNotEmpty(), children)
     }
+
+    override fun toDebugString() = "${inner.toIntermediateString()}+"
 }
 
 /**
  * Symbol created by use of the '?' operator.
  * Because of the possibility that nothing is captured, this symbol cannot be given an ID or listener.
  */
-internal class Option(private val inner: Symbol) : Symbol() {
+internal class Option(val inner: Symbol) : Symbol(generateID("Option")) {
     override fun attemptMatch(input: CharStream, skip: Symbol, recursions: MutableList<String>): ContextFreeToken {
         val result = inner.match(input, skip, recursions)
         return if (result !== ContextFreeToken.NOTHING) {
@@ -169,19 +203,23 @@ internal class Option(private val inner: Symbol) : Symbol() {
             ContextFreeToken.EMPTY  // .additionalInfo == 0
         }
     }
+
+    override fun toDebugString() = "${inner.toIntermediateString()}?"
 }
 
 /**
  * Symbol created by use of the '*' operator.
  * Because of the possibility that nothing is captured, this symbol cannot be given an ID or listener.
  */
-internal class Star(inner: Symbol) : Symbol() {
+internal class Star(inner: Symbol) : Symbol(generateID("Star")) {
     private val equivalent = Option(Multiple(inner))
 
     override fun attemptMatch(input: CharStream, skip: Symbol, recursions: MutableList<String>): ContextFreeToken {
         val result = equivalent.match(input, skip, recursions)
         return if (result.isNotPresent()) ContextFreeToken.EMPTY else result.children[0].apply { origin = this@Star }
     }
+
+    override fun toDebugString() = "${(equivalent.inner as Multiple).inner.toIntermediateString()}*"
 }
 
 /**
@@ -192,22 +230,28 @@ internal class Star(inner: Symbol) : Symbol() {
  * May be implicitly defined.
  */
 internal class Switch(
-    id: String = ID.next(),
+    id: String = generateID("Switch"),
     private val lowerBounds: IntVector,
     private val upperBounds: IntVector
 ) : Symbol(id) {
-    constructor(lowerBounds: IntVector, upperBounds: IntVector) : this(ID.next(), lowerBounds, upperBounds)
+    constructor(lowerBounds: IntVector, upperBounds: IntVector) : this(generateID("Switch"), lowerBounds, upperBounds)
+
+    init {
+        assert(lowerBounds.size == upperBounds.size)
+    }
 
     override fun attemptMatch(input: CharStream, skip: Symbol, recursions: MutableList<String>): ContextFreeToken {
-        // assert(lowerBounds.size == upperBounds.size)
         val test = lowerBounds.indices.indexOfFirst { input.peek().code in lowerBounds[it]..upperBounds[it] }
         val result = tokenOrNothing(input, test != -1, length = 1, ordinal = test)
         input.advancePosition(result.substring.length)
         return result
     }
 
+    // TODO implement
+    override fun toDebugString() = "[...]"
+
     companion object {
-        val DIGIT = Switch(vectorOf('0'), vectorOf('9'))
+        val DIGIT = Switch("DIGIT", vectorOf('0'), vectorOf('9'))
 
         fun excluding(c: Char) = Switch(vectorOf(Char.MIN_VALUE, c + 1), vectorOf(c - 1, Char.MAX_VALUE))
 
@@ -215,8 +259,8 @@ internal class Switch(
             val lowerBounds = MutableIntVector(c.size)
             val upperBounds = MutableIntVector(c.size)
             for (char in c) {
-                lowerBounds.push(char.code)
-                upperBounds.push(char.code)
+                lowerBounds += char.code
+                upperBounds += char.code
             }
             return Switch(lowerBounds, upperBounds)
         }
@@ -224,25 +268,27 @@ internal class Switch(
 }
 
 /**
- * Symbol created by definition of a string. May be implicitly defined.
+ * Symbol created by definition of a string.
  */
-internal class Text(id: String = ID.next(), private val acceptable: String) : Symbol(id) {
-    private val length = acceptable.length
-
-    constructor(acceptable: String) : this(ID.next(), acceptable)
+internal class Text(id: String = generateID("Text"), private val acceptable: String) : Symbol(id) {
+    constructor(acceptable: String) : this(generateID("Text"), acceptable)
 
     override fun attemptMatch(input: CharStream, skip: Symbol, recursions: MutableList<String>): ContextFreeToken {
-        val result = tokenOrNothing(input, acceptable.all { it == input.next() }, length = length)
-        input.regressPosition(length - result.substring.length)
+        input.savePosition()
+        val result = tokenOrNothing(input, acceptable.all { it == input.next() }, length = acceptable.length)
+        input.revertPosition()
+        input.advancePosition(result.substring.length)
         return result
     }
+
+    override fun toDebugString() = "\"${acceptable.toEscapeString()}\""
 }
 
 /**
- * Symbol created by defintition of a string of length 1. May be implicitly defined.
+ * Symbol created by defintition of a string of length 1.
  */
-internal class Character(id: String = ID.next(), private val acceptable: Char) : Symbol(id) {
-    constructor(acceptable: Char) : this(ID.next(), acceptable)
+internal class Character(id: String = generateID("Character"), private val acceptable: Char) : Symbol(id) {
+    constructor(acceptable: Char) : this(generateID("Character"), acceptable)
 
     override fun attemptMatch(input: CharStream, skip: Symbol, recursions: MutableList<String>): ContextFreeToken {
         val result = tokenOrNothing(input, input.peek() == acceptable, length = 1)
@@ -250,9 +296,11 @@ internal class Character(id: String = ID.next(), private val acceptable: Char) :
         return result
     }
 
+    override fun toDebugString() = "\"${acceptable.toEscapeString() }\""
+
     companion object {
-        val DASH = Character('-')
-        val APOSTROPHE = Character('\'')
+        val DASH = Character("DASH", '-')
+        val QUOTE = Character("QUOTE", '"')
     }
 }
 
@@ -260,7 +308,7 @@ internal class Character(id: String = ID.next(), private val acceptable: Char) :
 /**
  * A catch-all switch literal (e.g. \[-]).
  */
-internal class AnyCharacter(id: String = ID.next()) : Symbol(id) {
+internal class AnyCharacter(id: String = generateID("AnyCharacter")) : Symbol(id) {
     override fun attemptMatch(input: CharStream, skip: Symbol, recursions: MutableList<String>): ContextFreeToken {
         try {
             input.peek()    // throws if end is reached
@@ -269,21 +317,29 @@ internal class AnyCharacter(id: String = ID.next()) : Symbol(id) {
             return ContextFreeToken.NOTHING
         }
     }
+
+    override fun toDebugString() = "[-]"
 }
 
-internal class ImplicitSymbol(id: String = ID.next()) : Symbol(id) {
-    var reference: Symbol? = null
+internal class ImplicitSymbol(id: String) : Symbol(id) {
+    lateinit var reference: Symbol
+
+    override fun reference() = reference
 
     override fun attemptMatch(input: CharStream, skip: Symbol, recursions: MutableList<String>): ContextFreeToken {
-        return reference!!.match(input, skip, recursions)
+        return reference.match(input, skip, recursions)
     }
+
+    override fun toDebugString() = "::${reference.toIntermediateString()}"
 }
 
 /**
  * Special rule for internal API usage.
  */
-internal data object ZeroLengthSymbol : Symbol() {
+internal class ZeroLengthSymbol(id: String) : Symbol(id) {
     override fun attemptMatch(input: CharStream, skip: Symbol, recursions: MutableList<String>) = ContextFreeToken.EMPTY
+
+    override fun toDebugString() = id
 }
 
 /**
@@ -299,8 +355,15 @@ private inline fun <E, T> Iterable<E>.anyNot(not: T, transform: (E) -> T): T {
     return not
 }
 
-private object ID {
-    private var counter = 0
-
-    fun next() = counter.toString().also { ++counter }  // Synchronization not necessary
+private fun Any?.toEscapeString(): String {
+    return toString().map { c ->
+        when (c) {
+            in characterEscapes.values -> "\\${characterEscapes.filterValues { it == c }.keys.single()}"
+            else -> c
+        }
+    }.joinToString()
 }
+
+private var idCounter = 0   // Synchronization not necessary
+
+private fun generateID(symbolType: String) = "$$symbolType:$idCounter".also { ++idCounter }
