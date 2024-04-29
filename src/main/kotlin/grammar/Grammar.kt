@@ -14,33 +14,28 @@ import java.io.*
 @Suppress("UNCHECKED_CAST")
 fun <R,M : Grammar.MutableState> grammar(
     formalGrammar: String,
-    cachePath: String = "",
+    cachePath: String? = null,
     builder: Grammar<R,M>.BuilderContext.() -> Unit
 ): Grammar<R,M> {
-    val needsCache = if (cachePath.isNotEmpty()) {
+    val needsCache = cachePath?.let {
         val file = File(cachePath)
         if (file.exists()) {
-            FileInputStream(file).use { fileStream ->
-                ObjectInputStream(fileStream).use {
-                    try {
-                        return it.readObject() as Grammar<R, M>
-                    } catch (_: TypeCastException) {}
+            ObjectInputStream(FileInputStream(file)).use {
+                try {
+                    return it.readObject() as Grammar<R, M>
+                } catch (_: TypeCastException) {
+                    // ...fallthrough
                 }
             }
         }
-        true
-    } else {
-        false
     }
     return Grammar<R,M>().apply {
         rules = MetaGrammar.grammar.parse(formalGrammar, MetaGrammar.MutableState())
         builder(BuilderContext())
-        if (needsCache) {
-            FileOutputStream(cachePath).use { fileStream ->
-                ObjectOutputStream(fileStream).use {
-                    it.writeUnshared(this)
-                    it.flush()
-                }
+        needsCache?.let {
+            ObjectOutputStream(FileOutputStream(cachePath)).use {
+                it.writeUnshared(this)
+                it.flush()
             }
         }
     }
@@ -93,9 +88,11 @@ class Grammar<R,M : Grammar.MutableState> internal constructor() : Serializable 
      * Contains mutable properties which are manipulated by each listener invokation.
      * Useful for collecting information regardless of location in the parse tree.
      * Grammars that do not need such information should create an instance of the base class.
+     * The mutable state of parsing attempt must be a subclass of this class, as this class holds
+     * information regarding the position of the cursor in a source of input.
      */
     open class MutableState {
-        internal var position = -1  // TODO implement functionality
+        internal var position = 0
     }
 
     /**
@@ -107,9 +104,9 @@ class Grammar<R,M : Grammar.MutableState> internal constructor() : Serializable 
         /**
          * Declares the rule with this ID to be the principle rule.
          */
-        fun String.start() {
+        fun ListenerDefinition<out R>.start() {
             try {
-                startID = this
+                startID = id
             } catch (e: ReassignmentException) {
                 throw ReassignmentException("Start rule already defined")
             }
@@ -130,7 +127,8 @@ class Grammar<R,M : Grammar.MutableState> internal constructor() : Serializable 
          * Assigns the rule with this ID the given listener.
          * @return the rule ID
          */
-        operator fun <P> String.invoke(listener: Token.(M) -> P): String {
+        @Suppress("UNCHECKED_CAST")
+        operator fun <P> String.invoke(listener: Token.(M) -> P): ListenerDefinition<P> {
             if (this !in rules) {
                 throw NoSuchElementException("Rule '$this' is undefined")
             }
@@ -138,7 +136,7 @@ class Grammar<R,M : Grammar.MutableState> internal constructor() : Serializable 
                 throw ReassignmentException("Listener for rule '$this' is already defined")
             }
             listeners[this] = listener
-            return this
+            return (listenerDefinition as ListenerDefinition<P>).apply { id = this@invoke }
         }
 
         /**
@@ -201,36 +199,41 @@ class Grammar<R,M : Grammar.MutableState> internal constructor() : Serializable 
          * Throws an exception containing the error message and the current substring.
          * @throws ParseException
          */
-        fun Token.raise(message: String): Nothing {
-            throw ParseException("$message (in '$substring')")
+        fun Token.raise(message: String, mutableState: M): Nothing {
+            throw ParseException("$message (in '$substring')", mutableState.position)
         }
 
+        @Suppress("UNCHECKED_CAST")
         private inline fun <reified S : Symbol,reified T : Token,P> String.listenerOf(
             crossinline listener: T.(M) -> P
         ): ListenerDefinition<P> {
-            val id = invoke {
+            invoke {
                 if ((this as ContextFreeToken).origin.reference()::class != S::class) {
                     throw TokenMismatchException("Listener type does not agree with type of rule '$this'")
                 }
                 listener(this as T, it)
             }
-            val symbol = rules.getValue(id).reference()
+            val symbol = rules.getValue(this).reference()
             if (symbol !is S) {
-                throw TokenMismatchException("Type of rule '$id' described by listener (${S::class.simpleName}) " +
+                throw TokenMismatchException("Type of rule '$this' described by listener (${S::class.simpleName}) " +
                         "does not agree with actual type (${symbol::class.simpleName})")
             }
-            return ListenerDefinition()
+            return (listenerDefinition as ListenerDefinition<P>).apply { id = this@listenerOf }
         }
     }
 
     private fun parse(inputStream: CharStream, mutableState: M): R {
         inputStream.use {
-            val skip = rules.getValue(skipID)
+            val skip = try {
+                rules.getValue(skipID)
+            } catch (e: NoSuchElementException) {
+                throw MissingRuleException("skip")
+            }
             val recursions = mutableListOf<String>()
             skip.consume(inputStream, recursions)
             val rootToken = rules.getValue(startID).match(inputStream, skip, recursions) // Base of parse tree
             if (rootToken === ContextFreeToken.NOTHING) {
-                throw ParseException("Start symbol not found in input", 0)
+                throw MissingRuleException("start")
             }
             skip.consume(inputStream, recursions)
             if (inputStream.hasNext()) {
@@ -249,7 +252,14 @@ class Grammar<R,M : Grammar.MutableState> internal constructor() : Serializable 
         }
     }
 
-    class ListenerDefinition<P> internal constructor()
+    /**
+     * Returned by listener definition.
+     *
+     * API Note: Enforces correct declaration of start symbol
+     */
+    class ListenerDefinition<P> internal constructor() {
+        internal lateinit var id: String
+    }
 
     private companion object {
         @Serial val serialVersionUID = 1L

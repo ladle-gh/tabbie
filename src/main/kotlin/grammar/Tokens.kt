@@ -382,7 +382,7 @@ internal class ContextFreeToken(
     override val match get() = children[0]
     override val length get() = substring.length
     override val charValue get() = substring.single()
-    override val stringValue by lazy { substring.toString() }
+    override val stringValue get() = substring
     override val matches get() = children
 
     override fun ordinal() = ordinal
@@ -418,14 +418,18 @@ internal class ContextFreeToken(
     override fun text() = getSingleAs<Text,QualifiedTextToken>()
     override fun switch() = getSingleAs<Switch,QualifiedSwitchToken>()
 
-    fun <M> walk(listeners: Map<String, Token.(M) -> Any?>, mutableState: M) {
+    fun <M : Grammar.MutableState> walk(listeners: Map<String, Token.(M) -> Any?>, mutableState: M) {
         children.forEach { it.walk(listeners, mutableState) } // Visit every node in tree
         payload = listeners[id]?.let {
-             it(this, mutableState)
-        } ?: when (origin) {
-            is Sequence, is Multiple, is Star -> children.map { it.payload }    // .isEmpty() == .isNotPresent()
-            is Junction, is Option -> children[0].payload   // (payload == null) == .isNotPresent()
-            else -> null    // Useful information for literals is found in .substring, not .payload
+            it(this, mutableState).also {
+                if (origin.isTerminal()) {
+                    mutableState.position += substring.length
+                }
+            }
+        } ?: when {
+            origin.isMultiChild() -> children.map { it.payload }
+            origin.isTerminal() -> children.getOrNull(0)?.payload
+            else -> null    // Useful information for literals can be found in 'substring'
         }
     }
 

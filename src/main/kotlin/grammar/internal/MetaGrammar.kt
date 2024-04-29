@@ -2,6 +2,31 @@ package grammar.internal
 
 import grammar.*
 
+/*
+    ID: [a-zA-Z] [a-zA-Z0-9_]*;
+    DIGIT: [0-9];
+    QUOTE: "${'"'}";
+
+    symbol: "(" symbol ")" | junction | sequence | multiple | option | ID | switch | character | text;
+    escape: "\" ([...] | ("u" DIGIT DIGIT DIGIT DIGIT));
+    char: escape | [-];
+
+    switch: "[" ((("-" char)? (char | (char "-" char))* (char "-")?) | "-") "]";
+    character: QUOTE char QUOTE;
+    text: QUOTE char+ QUOTE;
+
+    rule: ID ":" symbol ";"
+
+    sequence: symbol+;
+    junction: symbol ("|" symbol)+;
+    multiple: symbol "+";
+    option: symbol "?";
+    star: symbol "*";
+
+    start: rule+;
+    skip: ([\u0000-\u0009\u000B-\u0001F]+ | "/*"  [-]* "*/" | "//" [-\u0009\u000B-])+;
+ */
+
 internal object MetaGrammar {
     class MutableState : Grammar.MutableState() {
         val implicitNamedSymbols = mutableListOf<ImplicitSymbol>()
@@ -226,7 +251,7 @@ internal object MetaGrammar {
                     val id = sequenceAt(0).substring
                     val symbol = junctionAt(2) {    // -> symbol
                         if (ordinal() == 5) {   // -> Sequence.ID
-                            raise("Delegation to another named symbol is forbidden")
+                            raise("Delegation to another named symbol is forbidden", mutableState)
                         }
                         val rhs = match.payload<Symbol>()
                         if (rhs is ImplicitSymbol) {    // Delegation to literal
@@ -276,7 +301,7 @@ internal object MetaGrammar {
 
                 "start".multiple { mutableState ->
                     if (mutableState.implicitNamedSymbols.any()) {
-                        raise("No definitions found for implicit symbols: ${mutableState.implicitNamedSymbols}")
+                        raise("No definitions found for implicit symbols: ${mutableState.implicitNamedSymbols}", mutableState)
                     }
                     mutableState.rules
                 }.start()

@@ -55,6 +55,31 @@ internal sealed class Symbol(var id: String) {
         }
     }
 
+
+    fun isSingleChild(): Boolean {
+        return when (this) {
+            is Option, is Junction -> true
+            is ImplicitSymbol -> reference.isSingleChild()
+            else -> false
+        }
+    }
+
+    fun isMultiChild(): Boolean {
+        return when (this) {
+            is Sequence, is Multiple, is Star -> true
+            is ImplicitSymbol -> reference.isMultiChild()
+            else -> false
+        }
+    }
+
+    fun isTerminal(): Boolean {
+        return when (this) {
+            is Switch, is Text, is Character, is AnyCharacter, is ZeroLengthSymbol -> true
+            is ImplicitSymbol -> reference.isTerminal()
+            else -> false
+        }
+    }
+
     abstract fun toDebugString(): String
 
     /**

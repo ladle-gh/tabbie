@@ -5,11 +5,16 @@ package grammar
  */
 sealed class GrammarException(message: String) : Exception(message)
 
+class MissingRuleException(modifier: String) : GrammarException("Rule with modifier '$modifier()' not found")
+
 /**
  * Thrown to denote that a fatal error has occurred during parsing.
  */
-class ParseException internal constructor(message : String, index: Int = -1) : GrammarException(message) {
-    var index = index   // If -1, must be calculated first (raised by API user in listener)
+class ParseException internal constructor(
+    message : String,
+    index: Int
+) : GrammarException("$message at index $index") {
+    var index = index
         internal set
 }
 
